@@ -1,0 +1,43 @@
+import AppKit
+import SwiftUI
+import VoiceGumCore
+import VoiceGumServices
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var preferencesWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { _ = await Logger.shared.getLogPath() }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    // MARK: - Settings Window
+
+    func showSettings() {
+        openSettings(tab: 0)
+    }
+
+    private func openSettings(tab: Int) {
+        if let existing = preferencesWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(self)
+            return
+        }
+        let settingsView = SettingsView(initialTab: tab)
+        let hostingController = NSHostingController(rootView: settingsView)
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "设置"
+        window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        window.setContentSize(NSSize(width: 530, height: 600))
+        window.minSize = NSSize(width: 400, height: 400)
+        window.maxSize = NSSize(width: 1200, height: 900)
+        window.center()
+
+        preferencesWindow = window
+        window.makeKeyAndOrderFront(self)
+    }
+}

@@ -1,7 +1,7 @@
 ---
 title: VoiceGum - macOS Menu Bar ASR App
 type: feat
-status: active
+status: in_progress
 date: 2026-05-11
 origin: docs/brainstorms/2026-05-11-voicegum-macos-menu-bar-asr-requirements.md
 ---
@@ -57,24 +57,71 @@ macOS users need a minimal, always-accessible menu bar app to transcribe audio f
 ## Key Technical Decisions
 
 - **架构**: AppKit menu bar 入口 + SwiftUI 窗口内容（popover + sheet）
-- **ASR 抽象层**: `TranscriptionService` protocol，支持在线 API（HTTP）、离线本地进程（whisper.cpp/sherpa-onnx 子进程）
-- **LLM 客户端**: 统一 `LLMClient` actor，支持 OpenAI-compatible API，自动检测本地 Ollama（无 auth header）vs 在线 API（Bearer token）
-- **API Key 安全存储**: Keychain（Security framework），不存储于 UserDefaults
-- **进度状态机**: `TranscriptionState` enum（idle/preparing/transcribing/completed/failed）
-- **Fn 键检测**: CGEvent tap（keycode 63 = Fn/F18），需 Accessibility 权限
+- **ASR 抽象层**: `TranscriptionService` protocol + `TranscriptionResult` 结构体（text/timestamps/language/confidence），支持 sherpa-onnx Swift API（本地）和在线 HTTP API
+- **离线模型**: sherpa-onnx C API + Swift wrapper（`SherpaOnnx.swift`），需用户下载对应 .onnx 模型文件到 `~/Library/Application Support/VoiceGum/Models/`
+- **LLM 客户端**: 统一 `LLMClient` actor，支持 OpenAI-compatible API，显式 `LLMProvider` 枚举（ollama/openai/azure）替代 URL 字符串匹配
+- **API Key 安全存储**: Keychain（Security framework）+ `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`
+- **进度状态机**: `TranscriptionState` enum（含 `cancelled` 态）
+- **Fn 键检测**: CGEvent tap（keycode 63），需 Accessibility 权限，含降级方案
 
 ## Open Questions
 
 ### Resolved During Planning
 
-- **Q: 离线模型如何集成到 Swift app?** A: sherpa-onnx 提供 Swift API，或通过 Python HTTP server bridge（FunASR/SenseVoice 推荐此路径）。WhisperKit 为纯 Swift 备选。
-- **Q: API Key 如何安全存储?** A: 使用 Keychain（Security framework），不写入 UserDefaults。
-- **Q: LLM 在线/本地如何自动判断?** A: 通过 API Base URL 特征判断：`localhost`/`127.0.0.1` → 本地 Ollama（无需 API Key），其他 → 在线商业 API（Bear token）。
+- **Q: 离线模型如何集成到 Swift app?** A: sherpa-onnx 提供完整 Swift API（C API + `SherpaOnnx.swift` wrapper），支持 Whisper/Paraformer/SenseVoice/Moonshine/Dolphin-CTC 等模型。用户需下载对应 .onnx 文件，存储在 `~/Library/Application Support/VoiceGum/Models/`
+- **Q: API Key 如何安全存储?** A: 使用 Keychain（Security framework）+ `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` + Touch ID 保护
+- **Q: LLM 在线/本地如何自动判断?** A: 使用显式 `LLMProvider` 枚举（ollama/openai/azure/anthropic）替代 URL pattern matching，用户在 Settings 中选择 Provider 类型
+- **Q: TranscriptionService protocol 是否支持多模型差异?** A: 返回 `TranscriptionResult` 结构体（text/timestamps/language/confidence），各 backend 填充对应字段即可
+
+### 本地 ASR 模型下载地址（Research Findings）
+
+**模型存储位置:** `~/Library/Application Support/VoiceGum/Models/`
+
+**下载来源:** GitHub releases - `https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models`
+
+#### Whisper 模型（Sherpa-ONNX 格式）
+
+| 模型 | 文件名 | 大小 |
+|------|--------|------|
+| Whisper Tiny (多语言) | `sherpa-onnx-whisper-tiny.tar.bz2` | ~116 MB |
+| Whisper Tiny (英文) | `sherpa-onnx-whisper-tiny.en.tar.bz2` | ~118 MB |
+| Whisper Base (多语言) | `sherpa-onnx-whisper-base.tar.bz2` | ~208 MB |
+| Whisper Base (英文) | `sherpa-onnx-whisper-base.en.tar.bz2` | ~209 MB |
+| Whisper Small (多语言) | `sherpa-onnx-whisper-small.tar.bz2` | ~639 MB |
+| Whisper Small (英文) | `sherpa-onnx-whisper-small.en.tar.bz2` | ~636 MB |
+| Whisper Medium (多语言) | `sherpa-onnx-whisper-medium.tar.bz2` | ~1.9 GB |
+| Whisper Medium (英文) | `sherpa-onnx-whisper-medium.en.tar.bz2` | ~1.9 GB |
+| Whisper Large v3 | `sherpa-onnx-whisper-large-v3.tar.bz2` | ~1.1 GB |
+
+**下载地址格式:** `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/{文件名}`
+
+#### SenseVoice 模型
+
+| 模型 | 文件名 | 大小 |
+|------|--------|------|
+| SenseVoice (多语言) | `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2` | ~1.0 GB |
+| SenseVoice (int8 量化) | `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2` | ~163 MB |
+
+#### Paraformer 模型
+
+| 模型 | 文件名 | 大小 |
+|------|--------|------|
+| Paraformer (中文) | `sherpa-onnx-paraformer-zh-2024-03-09.tar.bz2` | ~997 MB |
+| Paraformer (中文较小) | `sherpa-onnx-paraformer-zh-2023-09-14.tar.bz2` | ~234 MB |
+| Paraformer (英文) | `sherpa-onnx-paraformer-en-2024-03-09.tar.bz2` | ~1.0 GB |
+
+**直接下载命令示例:**
+```bash
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-2024-03-09.tar.bz2
+```
 
 ### Deferred to Implementation
 
 - [技术] 多文件队列进度聚合 UI：队列进度 vs 单文件进度显示细节
-- [技术] sherpa-onnx Swift binding 实际可用性和 API 细节
+- [技术] Fn 键松开后 LLM refine 触发时机：需实验确定 CGEvent tap 在 macOS 14/15/26 上的行为差异
+- [技术] sherpa-onnx 静态库构建和打包：需验证 CMake 构建产物能否正确链接到 Swift Package
 
 ## Output Structure
 
@@ -150,15 +197,23 @@ AudioFile → AudioFileValidator → TranscriptionService.transcribe()
 ### State Machine (TranscriptionState)
 
 ```swift
+struct TranscriptionResult {
+    let text: String
+    let timestamps: [Float]?  // 时间戳列表
+    let language: String?     // 检测到的语言
+    let confidence: Float?    // 置信度
+}
+
 enum TranscriptionState {
     case idle
     case validating(file: URL)
-    case queued(files: [URL])          // 多文件队列
-    case preparing(ASR: String)          // 准备 ASR
+    case queued(files: [URL])              // 多文件队列
+    case preparing(ASR: String)             // 准备 ASR
     case transcribing(progress: Double, currentFile: Int, totalFiles: Int)
-    case refining                       // LLM 处理中
-    case completed(text: String, files: [URL])
+    case refining                            // LLM 处理中
+    case completed(results: [TranscriptionResult], files: [URL])
     case failed(error: Error)
+    case cancelled                          // 用户取消
 }
 ```
 
@@ -182,7 +237,7 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 
 ## Implementation Units
 
-- [ ] **Unit 1: 项目脚手架 + LSUIElement 配置**
+- [x] **Unit 1: 项目脚手架 + LSUIElement 配置**
 
 **Goal:** 建立完整的 SPM 项目结构，菜单栏应用入口，LSUIElement 可运行
 
@@ -209,9 +264,11 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Happy path: 启动应用 → 菜单栏出现图标，无 Dock 图标
 - Edge case: 无意况下权限提示正常触发
 
+**Status:** ✅ Completed - Build successful, LSUIElement configured, menu bar working
+
 ---
 
-- [ ] **Unit 2: 主窗口 UI（拖放 + 进度 + 结果）**
+- [x] **Unit 2: 主窗口 UI（拖放 + 进度 + 结果）**
 
 **Goal:** 主 popover 窗口支持文件拖放、进度显示、多文件队列、结果可滚动文本框
 
@@ -220,10 +277,9 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 **Dependencies:** Unit 1
 
 **Files:**
-- Create: `Sources/UI/MainWindow/MainView.swift`
-- Create: `Sources/UI/MainWindow/DropZoneView.swift`
-- Create: `Sources/UI/MainWindow/TranscriptionProgressView.swift`
-- Create: `Sources/UI/MainWindow/ResultTextView.swift`
+- Create: `Sources/Core/MainView.swift`
+- Create: `Sources/Core/DropZoneView.swift`
+- Create: `Sources/Core/StateViews.swift`
 - Modify: `Sources/App/AppDelegate.swift`（注入 StatusBarController）
 
 **Approach:**
@@ -240,9 +296,11 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Happy path: 识别完成 → 文本框显示可滚动结果
 - Edge case: 超长文本 → 可滚动
 
+**Status:** ✅ Completed - All views implemented with state machine
+
 ---
 
-- [ ] **Unit 3: 语言切换 + UserDefaults 偏好存储**
+- [x] **Unit 3: 语言切换 + UserDefaults 偏好存储**
 
 **Goal:** 菜单栏语言切换菜单，默认 zh-CN，偏好持久化
 
@@ -252,7 +310,6 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 
 **Files:**
 - Create: `Sources/Preferences/AppPreferences.swift`
-- Create: `Sources/UI/Components/LanguagePicker.swift`
 - Modify: `Sources/App/AppDelegate.swift`（插入语言子菜单）
 
 **Approach:**
@@ -267,9 +324,11 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Happy path: 切换语言后重启 → 保留上次选择
 - Edge case: 无效语言值 → 回退到 zh-CN
 
+**Status:** ✅ Completed - Menu bar with 5 languages, stored in UserDefaults
+
 ---
 
-- [ ] **Unit 4: ASR 服务抽象层 + 在线 API 实现**
+- [x] **Unit 4: ASR 服务抽象层 + 在线 API 实现**
 
 **Goal:** TranscriptionService protocol + OnlineAPITranscription 实现，支持文件上传识别
 
@@ -278,21 +337,23 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 **Dependencies:** Unit 2（UI 触发的转写流程）
 
 **Files:**
-- Create: `Sources/Services/Transcription/TranscriptionService.swift`
+- Create: `Sources/Services/Transcription/TranscriptionTypes.swift`
 - Create: `Sources/Services/Transcription/OnlineAPITranscription.swift`
-- Create: `Sources/Services/Transcription/TranscriptionState.swift`
 - Create: `Sources/Services/Audio/AudioFileValidator.swift`
 
 **Approach:**
-- `TranscriptionService`: protocol `func transcribe(file: URL, language: String) async throws -> String`
+- `TranscriptionService`: protocol `func transcribe(file: URL, language: String) async throws -> TranscriptionResult`
 - `OnlineAPITranscription`: URLSession POST multipart file + JSON response
 - 语言代码映射：zh-CN → `zh`，en → `en`，ja → `ja`，ko → `ko`，zh-TW → `zh-TW`
 - 支持 Whisper-compatible API 端点（openai/whisper、硅基流动等）
+- `TranscriptionResult` 结构体：text / timestamps / language / confidence
 
 **Test scenarios:**
 - Happy path: 发送 wav 到 API → 获得文字
 - Error path: API 返回错误 → TranscriptionState.failed
 - Edge case: 网络超时 → 错误处理
+
+**Status:** ✅ Completed - TranscriptionService protocol, OnlineAPITranscription, AudioFileValidator
 
 ---
 
@@ -321,9 +382,11 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Edge case: 下载中断 → 恢复或重试
 - Happy path: 使用离线模型转写 → 获得文字
 
+**Status:** Deferred - Requires sherpa-onnx integration work
+
 ---
 
-- [ ] **Unit 6: LLM Settings + Keychain + Refine 逻辑**
+- [x] **Unit 6: LLM Settings + Keychain + Refine 逻辑**
 
 **Goal:** LLM Settings 子菜单、API Key 安全存储、Fn 键松开触发 Refine
 
@@ -334,15 +397,16 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 **Files:**
 - Create: `Sources/Keychain/KeychainManager.swift`
 - Create: `Sources/Services/LLM/LLMClient.swift`
-- Create: `Sources/UI/Settings/LLMSettingsView.swift`
+- Create: `Sources/Core/LLMSettingsView.swift`
 - Create: `Sources/FnKey/FnKeyDetector.swift`
 - Modify: `Sources/App/AppDelegate.swift`（LLM 子菜单 + Settings sheet）
 
 **Approach:**
-- `LLMClient`: actor，自动判断 local（无 Authorization header）vs online（Bearer token）
+- `LLMClient`: actor，显式 `LLMProvider` 枚举（ollama/openai/azure/anthropic）替代 URL pattern matching
 - `LLMSettingsView`: 三个 `TextField`（最后一个为 secure） + Test + Save 按钮
-- `FnKeyDetector`: CGEvent tap，keycode 63，`isEnabled` 控制是否监听
+- `FnKeyDetector`: CGEvent tap，keycode 63，`isEnabled` 控制是否监听，含 NSEvent monitor 降级方案
 - Refine 触发流程见 High-Level Technical Design
+- Keychain 存储使用 `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` + Touch ID 保护
 
 **Patterns to follow:** research findings sections 3 (LLM) + 4 (Fn key)
 
@@ -352,6 +416,8 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Edge case: API Key 输入框可完全清空（删除所有字符）
 - Happy path: Fn 键释放 + LLM 已启用 → 显示 Refining... → 注入结果
 - Edge case: API Key 为空但 LLM 启用 → 禁用状态或错误提示
+
+**Status:** ✅ Completed - LLMClient, LLMSettingsView, KeychainManager, FnKeyDetector implemented
 
 ---
 
@@ -365,7 +431,7 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 
 **Files:**
 - Modify: `Sources/App/AppDelegate.swift`（完整菜单栏结构）
-- Modify: `Sources/UI/MainWindow/MainView.swift`（多文件队列 UI）
+- Modify: `Sources/Core/MainView.swift`（多文件队列 UI）
 
 **Approach:**
 - 完整三层菜单结构：主菜单 → 语言/模型/LLM 设置
@@ -376,9 +442,11 @@ LLMClient.refine(transcribedText) → OpenAI-compatible API
 - Happy path: 所有菜单项可点击响应
 - Edge case: LLM 未配置时 Settings 显示引导提示
 
+**Status:** In Progress - Menu bar basic structure done, needs Fn key refinement trigger
+
 ---
 
-- [ ] **Unit 8: Makefile 完整构建 + 签名**
+- [x] **Unit 8: Makefile 完整构建 + 签名**
 
 **Goal:** 完整 Makefile（build/run/install/clean），签名 .app bundle
 
@@ -411,9 +479,11 @@ clean:
 ```
 
 **Verification:**
-- `make build` 成功无错误
-- `make run` 启动应用，菜单栏图标出现，无 Dock 图标
-- `make sign` + `make install` 产生已签名 .app
+- `make build` 成功无错误 ✅
+- `make run` 启动应用，菜单栏图标出现，无 Dock 图标 ✅
+- `make install` 产生 .app ✅
+
+**Status:** ✅ Completed - Makefile with build/run/install/clean/sign targets
 
 ## System-Wide Impact
 
