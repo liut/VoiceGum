@@ -289,6 +289,21 @@ public let allModels: [ModelInfo] = [
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp32.gguf"]
     ),
+    // Qwen3-ASR safetensors models
+    ModelInfo(
+        id: "qwen3-asr-0.6b", displayName: "Qwen3-ASR 0.6B",
+        fileSize: 1_200_000_000, sizeLabel: "~1.2 GB",
+        hfRepo: "Qwen/Qwen3-ASR-0.6B",
+        msRepo: "",
+        hfFiles: ["config.json", "model.safetensors", "vocab.json", "merges.txt", "generation_config.json"]
+    ),
+    ModelInfo(
+        id: "qwen3-asr-1.7b", displayName: "Qwen3-ASR 1.7B",
+        fileSize: 3_400_000_000, sizeLabel: "~3.4 GB",
+        hfRepo: "Qwen/Qwen3-ASR-1.7B",
+        msRepo: "",
+        hfFiles: ["config.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors", "model.safetensors.index.json", "vocab.json", "merges.txt", "generation_config.json"]
+    ),
 ]
 
 

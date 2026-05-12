@@ -163,7 +163,7 @@ public struct LocalTranscriptionService: TranscriptionService {
         }
     }
 
-    private func convertToWavIfNeeded(_ file: URL) async throws -> URL {
+    func convertToWavIfNeeded(_ file: URL) async throws -> URL {
         let ext = file.pathExtension.lowercased()
 
         // Always go through normalize path so VAD can detect soft speech

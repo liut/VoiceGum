@@ -25,11 +25,19 @@ final class TranscriptionViewModel: ObservableObject {
             let apiKey = AppPreferences.shared.asrAPIKey.isEmpty ? nil : AppPreferences.shared.asrAPIKey
             transcriptionService = OnlineAPITranscription(baseURL: baseURL, apiKey: apiKey, model: AppPreferences.shared.asrModel)
         default:
-            // Local model - check if downloaded then use local transcription
-            if isModelDownloaded(AppPreferences.shared.asrModel) {
-                transcriptionService = LocalTranscriptionService(modelId: AppPreferences.shared.asrModel)
-            } else {
+            // Local model - check if downloaded then use appropriate engine
+            guard isModelDownloaded(AppPreferences.shared.asrModel) else {
                 transcriptionService = nil
+                return
+            }
+            let modelId = AppPreferences.shared.asrModel
+            if modelId.hasPrefix("qwen3") {
+                let size: QwenASRService.QwenASRModelSize = modelId.contains("1.7b") ? .large : .small
+                let svc = QwenASRService(modelSize: size)
+                try? svc.loadModel()
+                transcriptionService = svc
+            } else {
+                transcriptionService = LocalTranscriptionService(modelId: modelId)
             }
         }
     }
@@ -38,8 +46,19 @@ final class TranscriptionViewModel: ObservableObject {
         let modelsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!.appendingPathComponent("VoiceGum/Models/\(modelId)")
         guard FileManager.default.fileExists(atPath: modelsDir.path) else { return false }
+        // Qwen3-ASR: check for safetensors + config
+        if modelId.hasPrefix("qwen3") {
+            let required = ["config.json", "model.safetensors", "vocab.json", "merges.txt"]
+            let hasSafetensors = FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent("model.safetensors").path)
+            let hasIndex = FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent("model.safetensors.index.json").path)
+            if hasSafetensors || hasIndex {
+                return required.allSatisfy { FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent($0).path) }
+            }
+            return false
+        }
+        // GGUF: check for non-empty directory
         if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path) {
-            return !contents.isEmpty
+            return contents.contains(where: { !$0.hasSuffix(".part") && !$0.hasPrefix(".") })
         }
         return false
     }

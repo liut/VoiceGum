@@ -40,9 +40,14 @@ struct ASRSettingsTab: View {
     let onlineModels = [("whisper-1", "Whisper v1"), ("whisper-large", "Whisper Large v3")]
 
     let modelFamilies: [ModelFamily] = [
-        ModelFamily(id: "sensevoice", name: "SenseVoice", icon: "ear.and.waveform",
+        ModelFamily(id: "sensevoice", name: "SenseVoice Small", icon: "ear.and.waveform",
             description: "多语言识别 · 中文/英文/粤语/日语/韩语 · Metal加速",
-            tags: ["本地", "GPU", "GGUF"], models: allModels),
+            tags: ["本地", "GPU", "GGUF"],
+            models: allModels.filter { $0.id.hasPrefix("sense-voice") }),
+        ModelFamily(id: "qwen3asr", name: "Qwen3-ASR", icon: "brain.head.profile",
+            description: "通义千问语音识别 · 16头注意力 · 752M参数 · 更高精度",
+            tags: ["本地", "CPU", "Safetensors"],
+            models: allModels.filter { $0.id.hasPrefix("qwen3") }),
     ]
 
     var body: some View {

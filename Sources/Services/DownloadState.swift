@@ -20,7 +20,11 @@ public final class DownloadState: ObservableObject {
         var downloaded: Set<String> = []
         var partial: [String: Double] = [:]
         for model in allModels {
-            if await ModelDownloadManager.shared.isModelDownloaded(model.id) {
+            if model.id.hasPrefix("qwen3") {
+                if isQwenModelDownloaded(model.id) {
+                    downloaded.insert(model.id)
+                }
+            } else if await ModelDownloadManager.shared.isModelDownloaded(model.id) {
                 downloaded.insert(model.id)
             } else if let info = await ModelDownloadManager.shared.partialDownloadInfo(model.id, expectedSize: model.fileSize) {
                 partial[model.id] = info.progress
@@ -28,6 +32,16 @@ public final class DownloadState: ObservableObject {
         }
         downloadedModels = downloaded
         partialProgress = partial
+    }
+
+    private func isQwenModelDownloaded(_ modelId: String) -> Bool {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!.appendingPathComponent("VoiceGum/Models/\(modelId)")
+        let required = ["config.json", "vocab.json", "merges.txt"]
+        let hasSafetensors = FileManager.default.fileExists(atPath: dir.appendingPathComponent("model.safetensors").path)
+        let hasIndex = FileManager.default.fileExists(atPath: dir.appendingPathComponent("model.safetensors.index.json").path)
+        guard hasSafetensors || hasIndex else { return false }
+        return required.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
     }
 
     public func download(_ model: ModelInfo) {
