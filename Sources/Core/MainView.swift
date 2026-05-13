@@ -53,7 +53,10 @@ public struct MainView: View {
                     ResultView(
                         results: results,
                         onCopy: { viewModel.copyToClipboard() },
-                        onNew: { viewModel.reset() }
+                        onNew: { viewModel.reset() },
+                        onSummarize: { viewModel.summarize() },
+                        summaryText: viewModel.summaryText,
+                        isSummarizing: viewModel.isSummarizing
                     )
 
                 case .failed(let error):

@@ -10,6 +10,8 @@ final class TranscriptionViewModel: ObservableObject {
     @Published var state: TranscriptionState = .idle
     @Published var droppedFileURL: URL?
     @Published var statusMessage: String = ""
+    @Published var summaryText: String?
+    @Published var isSummarizing = false
 
     private var transcriptionService: TranscriptionService?
     private var currentTask: Task<Void, Never>?
@@ -186,6 +188,29 @@ final class TranscriptionViewModel: ObservableObject {
     func reset() {
         droppedFileURL = nil
         state = .idle
+        summaryText = nil
+    }
+
+    func summarize() {
+        guard case .completed(let results, _) = state, !isSummarizing else { return }
+        guard AppPreferences.shared.llmEnabled && !AppPreferences.shared.llmBaseURL().isEmpty else { return }
+
+        let textToSummarize = results.map { $0.text }.joined(separator: "\n\n")
+        guard !textToSummarize.isEmpty else { return }
+
+        isSummarizing = true
+        summaryText = nil
+
+        Task {
+            do {
+                let prompt = AppPreferences.shared.summaryPrompt
+                let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
+                summaryText = result
+            } catch {
+                summaryText = "摘要失败: \(error.localizedDescription)"
+            }
+            isSummarizing = false
+        }
     }
 
     func copyToClipboard() {

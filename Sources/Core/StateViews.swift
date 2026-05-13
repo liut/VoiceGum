@@ -123,6 +123,9 @@ struct ResultView: View {
     let results: [TranscriptionResult]
     let onCopy: () -> Void
     let onNew: () -> Void
+    let onSummarize: (() -> Void)?
+    let summaryText: String?
+    let isSummarizing: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -130,6 +133,19 @@ struct ResultView: View {
                 Text(String(localized: "转写结果"))
                     .font(.headline)
                 Spacer()
+                if onSummarize != nil {
+                    if isSummarizing {
+                        HStack(spacing: 4) {
+                            ProgressView().scaleEffect(0.6)
+                            Text(String(localized: "摘要中...")).font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Button(action: { onSummarize?() }) {
+                            Label(String(localized: "摘要"), systemImage: "text.quote")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
                 Button(action: onCopy) {
                     Label(String(localized: "拷贝"), systemImage: "doc.on.doc")
                 }
@@ -145,10 +161,28 @@ struct ResultView: View {
             Divider()
 
             ScrollView {
-                Text(results.map { $0.text }.joined(separator: "\n\n"))
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let summary = summaryText {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(String(localized: "摘要"))
+                                .font(.headline)
+                                .foregroundColor(.accentColor)
+                            Text(summary)
+                                .font(.body)
+                                .textSelection(.enabled)
+                        }
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.05)))
+                        .padding(.horizontal, 4)
+
+                        Divider()
+                    }
+
+                    Text(results.map { $0.text }.joined(separator: "\n\n"))
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(16)
             }
         }
     }

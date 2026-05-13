@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TranscriptionResult: Sendable {
+public struct TranscriptionResult: Sendable, Codable {
     public let text: String
     public let timestamps: [Float]?
     public let language: String?
@@ -11,6 +11,38 @@ public struct TranscriptionResult: Sendable {
         self.timestamps = timestamps
         self.language = language
         self.confidence = confidence
+    }
+}
+
+public struct HistoryEntry: Codable, Identifiable, Sendable {
+    public let id: String
+    public let sourceFileName: String
+    public let timestamp: Date
+    public let engineDescription: String
+    public let language: String?
+    public let duration: TimeInterval?
+    public let text: String
+    public let summaryText: String?
+
+    public var displayTitle: String {
+        if let s = summaryText, !s.isEmpty {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return String(trimmed.prefix(30))
+        }
+        return sourceFileName
+    }
+
+    public init(id: String = UUID().uuidString, sourceFileName: String, timestamp: Date,
+                engineDescription: String, language: String?, duration: TimeInterval?,
+                text: String, summaryText: String?) {
+        self.id = id
+        self.sourceFileName = sourceFileName
+        self.timestamp = timestamp
+        self.engineDescription = engineDescription
+        self.language = language
+        self.duration = duration
+        self.text = text
+        self.summaryText = summaryText
     }
 }
 
