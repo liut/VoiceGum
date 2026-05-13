@@ -1,0 +1,286 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "在线 API" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在线 API" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "在線 API" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Online API" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オンライン API" } }
+      }
+    },
+    "本地模型" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "本地模型" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local Model" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルモデル" } }
+      }
+    },
+    "模式" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模式" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "模式" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mode" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "モード" } }
+      }
+    },
+    "在线服务商" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在线服务商" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "線上服務商" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Online Provider" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オンラインプロバイダー" } }
+      }
+    },
+    "服务商" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "服务商" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "服務商" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Provider" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロバイダー" } }
+      }
+    },
+    "OpenAI 配置" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "OpenAI 配置" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "OpenAI 設定" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "OpenAI Config" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "OpenAI 設定" } }
+      }
+    },
+    "火山引擎配置" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "火山引擎配置" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "火山引擎設定" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Volcano Engine Config" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Volcano Engine 設定" } }
+      }
+    },
+    "已下载" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已下载" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已下載" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloaded" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ダウンロード済" } }
+      }
+    },
+    "未完成" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未完成" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未完成" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Incomplete" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "未完了" } }
+      }
+    },
+    "当前" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "當前" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "現在" } }
+      }
+    },
+    "预计下载" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预计下载" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "預計下載" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Est. download" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "推定ダウンロード" } }
+      }
+    },
+    "下载" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "下載" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Download" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ダウンロード" } }
+      }
+    },
+    "继续" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "繼續" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resume" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再開" } }
+      }
+    },
+    "取消" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キャンセル" } }
+      }
+    },
+    "启用 LLM 优化" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启用 LLM 优化" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "啟用 LLM 優化" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable LLM Refinement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "LLM 最適化を有効化" } }
+      }
+    },
+    "API 配置" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 配置" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "API 設定" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "API Config" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "API 設定" } }
+      }
+    },
+    "提供商" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提供商" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提供商" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Provider" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロバイダー" } }
+      }
+    },
+    "测试" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "测试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "測試" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Test" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "テスト" } }
+      }
+    },
+    "保存" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存" } }
+      }
+    },
+    "清空 Key" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清空 Key" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清除 Key" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Key" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キーを削除" } }
+      }
+    },
+    "保存成功!" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存成功!" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存成功！" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved!" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存しました！" } }
+      }
+    },
+    "连接成功!" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接成功!" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接成功！" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected!" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続成功！" } }
+      }
+    },
+    "设置..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "設定⋯" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定⋯" } }
+      }
+    },
+    "设置" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "設定" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定" } }
+      }
+    },
+    "关于 VoiceGum" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关于 VoiceGum" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "關於 VoiceGum" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "About VoiceGum" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "VoiceGum について" } }
+      }
+    },
+    "转写中..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转写中..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉寫中⋯" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transcribing..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし中⋯" } }
+      }
+    },
+    "转写结果" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转写结果" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉寫結果" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transcription Result" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし結果" } }
+      }
+    },
+    "拷贝" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拷贝" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "拷貝" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コピー" } }
+      }
+    },
+    "重试" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重試" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リトライ" } }
+      }
+    },
+    "新文件" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新檔案" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New File" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新しいファイル" } }
+      }
+    },
+    "SenseVoice 正在转写..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "SenseVoice 正在转写..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "SenseVoice 正在轉寫⋯" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SenseVoice is transcribing..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "SenseVoice が文字起こし中⋯" } }
+      }
+    },
+    "本地推理中，请耐心等待" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地推理中，请耐心等待" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "本地推理中，請耐心等待" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local inference in progress, please wait" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカル推論中、お待ちください" } }
+      }
+    },
+    "选择或拖放音频文件开始" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择或拖放音频文件开始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇或拖放音頻檔案開始" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select or drop an audio file to begin" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声ファイルを選択またはドロップして開始" } }
+      }
+    },
+    "松开以添加" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "松开以添加" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "鬆開以添加" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release to drop" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ドロップして追加" } }
+      }
+    },
+    "拖放音频文件到此处或点击选择" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拖放音频文件到此处或点击选择" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "拖放音頻檔案到此處或點擊選擇" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop audio file here or click to select" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声ファイルをここにドロップまたはクリックして選択" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -7,7 +7,7 @@ struct IdleContentView: View {
             Image(systemName: "arrow.down.circle")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
-            Text("Select or drop an audio file to begin")
+            Text(String(localized: "选择或拖放音频文件开始"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
@@ -22,7 +22,7 @@ struct ValidatingView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
-            Text("Validating \(fileName)...")
+            Text(String(localized: "Validating \(fileName)..."))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -37,7 +37,7 @@ struct QueuedView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
-            Text("Queued \(fileCount) file(s)")
+            Text(String(localized: "Queued \(fileCount) file(s)"))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -52,7 +52,7 @@ struct PreparingView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
-            Text("Preparing \(asrName)...")
+            Text(String(localized: "Preparing \(asrName)..."))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -76,11 +76,11 @@ struct TranscriptionProgressView: View {
                     .progressViewStyle(.circular)
                     .scaleEffect(1.2)
 
-                Text("SenseVoice 正在转写...")
+                Text(String(localized: "SenseVoice 正在转写..."))
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Text("本地推理中，请耐心等待")
+                Text(String(localized: "本地推理中，请耐心等待"))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             } else {
@@ -88,7 +88,7 @@ struct TranscriptionProgressView: View {
                     .progressViewStyle(.linear)
                     .frame(width: 200)
 
-                Text(statusMessage.isEmpty ? "转写中..." : statusMessage)
+                Text(statusMessage.isEmpty ? String(localized: "转写中...") : statusMessage)
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -99,7 +99,7 @@ struct TranscriptionProgressView: View {
                 }
             }
 
-            Button("取消", action: onCancel)
+            Button(String(localized: "取消"), action: onCancel)
                 .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,7 +111,7 @@ struct RefiningView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
-            Text("Refining with LLM...")
+            Text(String(localized: "Refining with LLM..."))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -127,15 +127,15 @@ struct ResultView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("转写结果")
+                Text(String(localized: "转写结果"))
                     .font(.headline)
                 Spacer()
                 Button(action: onCopy) {
-                    Label("拷贝", systemImage: "doc.on.doc")
+                    Label(String(localized: "拷贝"), systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
                 Button(action: onNew) {
-                    Label("新文件", systemImage: "plus.circle")
+                    Label(String(localized: "新文件"), systemImage: "plus.circle")
                 }
                 .buttonStyle(.bordered)
             }
@@ -175,12 +175,12 @@ struct ErrorView: View {
             .frame(maxHeight: 200)
 
             HStack(spacing: 8) {
-                Button("拷贝") {
+                Button(String(localized: "拷贝")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(error.localizedDescription, forType: .string)
                 }
                 .buttonStyle(.bordered)
-                Button("重试", action: onRetry)
+                Button(String(localized: "重试"), action: onRetry)
                     .buttonStyle(.bordered)
             }
         }
@@ -198,11 +198,11 @@ struct CancelledView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
 
-            Text("Transcription cancelled")
+            Text(String(localized: "Transcription cancelled"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            Button("Start Over", action: onReset)
+            Button(String(localized: "Start Over"), action: onReset)
                 .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

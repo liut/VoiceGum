@@ -13,7 +13,7 @@ struct VoiceGumApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("关于 VoiceGum") {
+                Button(String(localized: "关于 VoiceGum")) {
                     let alert = NSAlert()
                     alert.messageText = "VoiceGum"
                     alert.informativeText = "A macOS menu bar ASR application.\n\nVersion 1.0.0"
@@ -22,7 +22,7 @@ struct VoiceGumApp: App {
                 }
             }
             CommandGroup(replacing: .appSettings) {
-                Button("设置...") {
+                Button(String(localized: "设置...")) {
                     appDelegate.showSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)

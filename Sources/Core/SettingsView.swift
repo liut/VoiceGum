@@ -61,7 +61,7 @@ struct ASRSettingsTab: View {
                 HStack(spacing: 8) {
                     Image(systemName: providerType == "online" ? "cloud" : "internaldrive")
                         .foregroundColor(.secondary)
-                    Text(providerType == "online" ? "在线 API" : "本地模型")
+                    Text(providerType == "online" ? String(localized: "在线 API") : String(localized: "本地模型"))
                         .font(.subheadline).fontWeight(.medium)
                     if providerType == "local", let m = allModels.first(where: { $0.id == selectedModel }),
                        let family = modelFamilies.first(where: { $0.models.contains(where: { $0.id == selectedModel }) }) {
@@ -73,9 +73,9 @@ struct ASRSettingsTab: View {
                 .padding(.horizontal, 4)
 
                 HStack {
-                    Picker("模式", selection: $providerType) {
-                        Text("在线 API").tag("online")
-                        Text("本地模型").tag("local")
+                    Picker(String(localized: "模式"), selection: $providerType) {
+                        Text(String(localized: "在线 API")).tag("online")
+                        Text(String(localized: "本地模型")).tag("local")
                     }
                     .pickerStyle(.segmented).labelsHidden()
                     .onChange(of: providerType) {
@@ -88,9 +88,9 @@ struct ASRSettingsTab: View {
 
                 if providerType == "online" {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("在线服务商").font(.headline)
+                        Text(String(localized: "在线服务商")).font(.headline)
 
-                        Picker("服务商", selection: $onlineService) {
+                        Picker(String(localized: "服务商"), selection: $onlineService) {
                             ForEach(onlineServices, id: \.0) { Text($0.1).tag($0.0) }
                         }
                         .pickerStyle(.segmented).labelsHidden()
@@ -100,7 +100,7 @@ struct ASRSettingsTab: View {
 
                         if onlineService == "openai" {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("OpenAI 配置").font(.subheadline).foregroundColor(.secondary)
+                                Text(String(localized: "OpenAI 配置")).font(.subheadline).foregroundColor(.secondary)
                                 TextField("API URL", text: $apiURL)
                                     .textFieldStyle(.roundedBorder)
                                     .onChange(of: apiURL) { AppPreferences.shared.asrAPIURL = apiURL }
@@ -117,7 +117,7 @@ struct ASRSettingsTab: View {
 
                         if onlineService == "volcengine" {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("火山引擎配置").font(.subheadline).foregroundColor(.secondary)
+                                Text(String(localized: "火山引擎配置")).font(.subheadline).foregroundColor(.secondary)
                                 TextField("APP ID", text: $volcAppId)
                                     .textFieldStyle(.roundedBorder)
                                     .onChange(of: volcAppId) { AppPreferences.shared.volcAppId = volcAppId }
@@ -196,12 +196,12 @@ struct ModelCard: View {
                         ForEach(family.tags, id: \.self) { TagBadge(text: $0) }
                         let anyDled = family.models.contains { ds.downloadedModels.contains($0.id) }
                         let anyPartial = family.models.contains { ds.partialProgress[$0.id] != nil }
-                        if anyDled { TagBadge(text: "已下载", color: .green) }
-                        if anyPartial { TagBadge(text: "未完成", color: .orange) }
+                        if anyDled { TagBadge(text: String(localized: "已下载"), color: .green) }
+                        if anyPartial { TagBadge(text: String(localized: "未完成"), color: .orange) }
                     }
                     Text(family.description).font(.caption).foregroundColor(.secondary).lineLimit(2)
                     if let v = family.models.first(where: { $0.id == selectedModel }) {
-                        Text("当前: \(v.displayName)").font(.caption2).foregroundColor(.secondary)
+                        Text("\(String(localized: "当前")): \(v.displayName)").font(.caption2).foregroundColor(.secondary)
                     }
                 }
                 Spacer()
@@ -220,7 +220,7 @@ struct ModelCard: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(model.displayName)
                                     .font(.subheadline).fontWeight(selectedModel == model.id ? .semibold : .regular)
-                                Text("预计下载: \(model.fileSizeDescription)")
+                                Text("\(String(localized: "预计下载")): \(model.fileSizeDescription)")
                                     .font(.caption2).foregroundColor(.secondary)
                             }
                             Spacer()
@@ -262,13 +262,13 @@ struct ModelCard: View {
                                         ProgressView(value: pct).frame(width: 40).tint(.orange)
                                         Text("\(Int(pct * 100))%").font(.caption2).foregroundColor(.orange)
                                     }
-                                    Button("继续") { ds.download(model) }.buttonStyle(.yellowButton)
+                                    Button(String(localized: "继续")) { ds.download(model) }.buttonStyle(.yellowButton)
                                     Button(action: { ds.delete(model) }) {
                                         Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                                     }.buttonStyle(.plain)
                                 }
                             } else {
-                                Button("下载") { ds.download(model) }.buttonStyle(.yellowButton)
+                                Button(String(localized: "下载")) { ds.download(model) }.buttonStyle(.yellowButton)
                             }
                         }
                         .padding(.horizontal, 16).padding(.vertical, 8)
@@ -328,11 +328,11 @@ struct LLMSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("启用 LLM 优化", isOn: $llmEnabled)
+                Toggle(String(localized: "启用 LLM 优化"), isOn: $llmEnabled)
                     .onChange(of: llmEnabled) { AppPreferences.shared.llmEnabled = llmEnabled }
             }
-            Section("API 配置") {
-                Picker("提供商", selection: $llmProvider) {
+            Section(String(localized: "API 配置")) {
+                Picker(String(localized: "提供商"), selection: $llmProvider) {
                     ForEach(providers, id: \.0) { Text($0.1).tag($0.0) }
                 }.onChange(of: llmProvider) { AppPreferences.shared.llmProvider = llmProvider }
                 TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
@@ -343,13 +343,13 @@ struct LLMSettingsTab: View {
             }
             Section {
                 HStack {
-                    Button("测试") { testConnection() }.buttonStyle(.bordered)
-                    Button("保存") { saveSettings() }.buttonStyle(.bordered)
+                    Button(String(localized: "测试")) { testConnection() }.buttonStyle(.bordered)
+                    Button(String(localized: "保存")) { saveSettings() }.buttonStyle(.bordered)
                     Spacer()
-                    Button("清空 Key") { apiKey = ""; saveSettings() }.buttonStyle(.bordered)
+                    Button(String(localized: "清空 Key")) { apiKey = ""; saveSettings() }.buttonStyle(.bordered)
                 }
-                if saveSuccess { Text("保存成功!").foregroundColor(.green).font(.caption) }
-                if testSuccess { Text("连接成功!").foregroundColor(.green).font(.caption) }
+                if saveSuccess { Text(String(localized: "保存成功!")).foregroundColor(.green).font(.caption) }
+                if testSuccess { Text(String(localized: "连接成功!")).foregroundColor(.green).font(.caption) }
                 if !testError.isEmpty { Text(testError).foregroundColor(.red).font(.caption) }
             }
         }

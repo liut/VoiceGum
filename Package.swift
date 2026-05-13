@@ -18,7 +18,8 @@ let package = Package(
             dependencies: ["VoiceGumCore", "VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey"],
             path: "Sources/App",
             resources: [
-                .copy("../../Frameworks/sense-voice")
+                .copy("../../Frameworks/sense-voice"),
+                .process("Resources"),
             ]
         ),
         .target(

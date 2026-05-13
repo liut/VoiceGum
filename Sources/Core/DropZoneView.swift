@@ -36,7 +36,7 @@ struct DropZoneView: View {
                         .font(.system(size: 40))
                         .foregroundColor(isTargeted ? .accentColor : .secondary)
 
-                    Text(isTargeted ? "Release to drop" : "Drop audio file here or click to select")
+                    Text(isTargeted ? String(localized: "松开以添加") : String(localized: "拖放音频文件到此处或点击选择"))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }

@@ -57,6 +57,25 @@ final class TranscriptionViewModel: ObservableObject {
         ModelDownloadManager.shared.isModelDownloaded(modelId)
     }
 
+    private func engineDescription(for service: TranscriptionService) -> String {
+        let serviceName = service.serviceName
+        let provider = AppPreferences.shared.asrProvider
+        switch provider {
+        case "online":
+            let onlineService = AppPreferences.shared.onlineASRService
+            switch onlineService {
+            case "volcengine": return "火山引擎 (流式识别)"
+            default: return "OpenAI (Whisper)"
+            }
+        case "local":
+            let modelId = AppPreferences.shared.asrModel
+            if modelId.hasPrefix("qwen3") { return "Qwen3-ASR (\(modelId))" }
+            else { return "SenseVoice (\(modelId))" }
+        default:
+            return serviceName
+        }
+    }
+
     func startTranscription() {
         guard let fileURL = droppedFileURL else { return }
 
@@ -82,6 +101,7 @@ final class TranscriptionViewModel: ObservableObject {
                 state = .queued(files: files)
 
                 var allResults: [TranscriptionResult] = []
+                var engineDescs: [String] = []
 
                 for (index, file) in files.enumerated() {
                     state = .preparing(ASR: transcriptionService?.serviceName ?? "ASR")
@@ -102,12 +122,17 @@ final class TranscriptionViewModel: ObservableObject {
                         return
                     }
 
+                    let engineDesc = engineDescription(for: service)
+
                     let result = try await service.transcribe(
                         file: file,
                         language: AppPreferences.shared.language
                     )
 
                     allResults.append(result)
+                    if engineDescs.isEmpty || engineDescs.count <= index {
+                        engineDescs.append(engineDesc)
+                    }
                 }
 
                 state = .transcribing(progress: 1.0, currentFile: files.count, totalFiles: files.count)
@@ -131,10 +156,10 @@ final class TranscriptionViewModel: ObservableObject {
                     }
 
                     state = .completed(results: refinedResults, files: files)
-                    saveResults(refinedResults, files: files)
+                    saveResults(refinedResults, files: files, engineDescs: engineDescs)
                 } else {
                     state = .completed(results: allResults, files: files)
-                    saveResults(allResults, files: files)
+                    saveResults(allResults, files: files, engineDescs: engineDescs)
                 }
 
             } catch {
@@ -170,7 +195,7 @@ final class TranscriptionViewModel: ObservableObject {
         }
     }
 
-    private func saveResults(_ results: [TranscriptionResult], files: [URL]) {
+    private func saveResults(_ results: [TranscriptionResult], files: [URL], engineDescs: [String]) {
         let resultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!.appendingPathComponent("VoiceGum/Result")
         try? FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
@@ -185,8 +210,11 @@ final class TranscriptionViewModel: ObservableObject {
                 : "unknown"
             let outputFile = resultDir.appendingPathComponent("\(timestamp)_\(fileName).txt")
 
+            let engineInfo = engineDescs.indices.contains(index) ? engineDescs[index] : ""
+
             let header = """
             VoiceGum 转写结果
+            引擎: \(engineInfo)
             时间: \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium))
             文件: \(files.indices.contains(index) ? files[index].lastPathComponent : "unknown")
             语言: \(result.language ?? "auto")
