@@ -181,6 +181,7 @@ struct ResultView: View {
                     Text(results.map { $0.text }.joined(separator: "\n\n"))
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
                 }
                 .padding(16)
             }

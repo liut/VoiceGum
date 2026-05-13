@@ -5,7 +5,15 @@ import VoiceGumServices
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static weak var shared: AppDelegate?
+
     private var preferencesWindow: NSWindow?
+    private var historyWindow: NSWindow?
+
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { _ = await Logger.shared.getLogPath() }
@@ -38,6 +46,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
 
         preferencesWindow = window
+        window.makeKeyAndOrderFront(self)
+    }
+
+    // MARK: - History Window
+
+    func openHistory() {
+        if let existing = historyWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(self)
+            return
+        }
+        let hostingController = NSHostingController(rootView: HistoryView())
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = String(localized: "历史记录")
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 400, height: 440))
+        window.center()
+
+        historyWindow = window
         window.makeKeyAndOrderFront(self)
     }
 }

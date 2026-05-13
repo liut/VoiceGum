@@ -1,7 +1,7 @@
 ---
 title: Separate LLM System Prompts from Provider Configuration
 type: refactor
-status: active
+status: completed
 date: 2026-05-13
 ---
 

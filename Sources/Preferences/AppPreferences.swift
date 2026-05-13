@@ -69,6 +69,11 @@ public final class AppPreferences: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Keys.llmEnabled) }
     }
 
+    public var summaryEnabled: Bool {
+        get { defaults.object(forKey: "voicegum.llm.summaryEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "voicegum.llm.summaryEnabled") }
+    }
+
     public var llmProvider: String {
         get { defaults.string(forKey: Keys.llmProvider) ?? "openai" }
         set { defaults.set(newValue, forKey: Keys.llmProvider) }

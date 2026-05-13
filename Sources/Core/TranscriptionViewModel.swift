@@ -15,6 +15,7 @@ final class TranscriptionViewModel: ObservableObject {
 
     private var transcriptionService: TranscriptionService?
     private var currentTask: Task<Void, Never>?
+    private var lastHistoryEntryId: String?
 
     init() {
         setupLocalService()
@@ -102,6 +103,8 @@ final class TranscriptionViewModel: ObservableObject {
                 let files = [fileURL]
                 state = .queued(files: files)
 
+                let duration = await captureDuration(fileURL)
+
                 var allResults: [TranscriptionResult] = []
                 var engineDescs: [String] = []
 
@@ -160,9 +163,11 @@ final class TranscriptionViewModel: ObservableObject {
 
                     state = .completed(results: refinedResults, files: files)
                     saveResults(refinedResults, files: files, engineDescs: engineDescs)
+                    await saveToHistory(results: refinedResults, files: files, engineDescs: engineDescs, duration: duration)
                 } else {
                     state = .completed(results: allResults, files: files)
                     saveResults(allResults, files: files, engineDescs: engineDescs)
+                    await saveToHistory(results: allResults, files: files, engineDescs: engineDescs, duration: duration)
                 }
 
             } catch {
@@ -193,7 +198,15 @@ final class TranscriptionViewModel: ObservableObject {
 
     func summarize() {
         guard case .completed(let results, _) = state, !isSummarizing else { return }
-        guard AppPreferences.shared.llmEnabled && !AppPreferences.shared.llmBaseURL().isEmpty else { return }
+        guard AppPreferences.shared.summaryEnabled else {
+            summaryText = "摘要功能未启用，请在设置中开启"
+            return
+        }
+        let baseURL = AppPreferences.shared.llmBaseURL()
+        guard !baseURL.isEmpty else {
+            summaryText = "摘要失败: Base URL 为空 provider=\(AppPreferences.shared.llmProvider)"
+            return
+        }
 
         let textToSummarize = results.map { $0.text }.joined(separator: "\n\n")
         guard !textToSummarize.isEmpty else { return }
@@ -203,9 +216,26 @@ final class TranscriptionViewModel: ObservableObject {
 
         Task {
             do {
+                let baseURLString = AppPreferences.shared.llmBaseURL()
+                guard let baseURL = URL(string: baseURLString) else {
+                    summaryText = "摘要失败: 无效的 Base URL"
+                    isSummarizing = false
+                    return
+                }
+                let provider: LLMProvider = switch AppPreferences.shared.llmProvider {
+                case "anthropic": .anthropic
+                case "ollama": .ollama
+                default: .openai
+                }
+                let apiKey = AppPreferences.shared.llmAPIKey()
+                await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
+
                 let prompt = AppPreferences.shared.summaryPrompt
                 let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
                 summaryText = result
+                if let id = lastHistoryEntryId {
+                    await HistoryManager.shared.updateSummary(id: id, summaryText: result)
+                }
             } catch {
                 summaryText = "摘要失败: \(error.localizedDescription)"
             }
@@ -249,6 +279,37 @@ final class TranscriptionViewModel: ObservableObject {
 
             """
             try? (header + result.text).write(to: outputFile, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func saveToHistory(results: [TranscriptionResult], files: [URL], engineDescs: [String], duration: TimeInterval?) async {
+        for (index, result) in results.enumerated() {
+            let fileName = files.indices.contains(index)
+                ? files[index].lastPathComponent
+                : "unknown"
+            let engineDesc = engineDescs.indices.contains(index) ? engineDescs[index] : ""
+            let entry = HistoryEntry(
+                sourceFileName: fileName,
+                timestamp: Date(),
+                engineDescription: engineDesc,
+                language: result.language,
+                duration: duration,
+                text: result.text,
+                summaryText: nil
+            )
+            lastHistoryEntryId = entry.id
+            await HistoryManager.shared.add(entry)
+        }
+    }
+
+    private func captureDuration(_ fileURL: URL) async -> TimeInterval? {
+        let asset = AVAsset(url: fileURL)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite && seconds > 0 ? seconds : nil
+        } catch {
+            return nil
         }
     }
 

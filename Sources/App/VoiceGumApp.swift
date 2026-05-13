@@ -7,7 +7,7 @@ struct VoiceGumApp: App {
 
     var body: some Scene {
         Window("VoiceGum", id: "main") {
-            MainView()
+            MainView(onOpenHistory: { appDelegate.openHistory() })
                 .frame(minWidth: 400, idealWidth: 480, minHeight: 360, idealHeight: 420)
         }
         .windowResizability(.contentMinSize)
