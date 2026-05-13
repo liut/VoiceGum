@@ -69,7 +69,7 @@ private struct HistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(entry.displayTitle)
-                .font(.subheadline)
+                .font(.system(size: 14))
                 .fontWeight(.medium)
                 .lineLimit(1)
             HStack(spacing: 12) {
@@ -194,15 +194,14 @@ private struct HistoryDetailView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                 }) {
-                    Image(systemName: "doc.on.doc")
+                    Label(String(localized: "拷贝"), systemImage: "doc.on.doc")
                         .font(.caption)
-                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help(String(localized: "拷贝"))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             Text(text)
-                .font(.body)
+                .font(.system(size: 15))
                 .textSelection(.enabled)
         }
         .padding(12)

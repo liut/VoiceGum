@@ -109,6 +109,7 @@ final class TranscriptionViewModel: ObservableObject {
                 var engineDescs: [String] = []
 
                 for (index, file) in files.enumerated() {
+                    try Task.checkCancellation()
                     state = .preparing(ASR: transcriptionService?.serviceName ?? "ASR")
 
                     let isLocalService = transcriptionService is LocalTranscriptionService
@@ -157,6 +158,7 @@ final class TranscriptionViewModel: ObservableObject {
 
                     var refinedResults: [TranscriptionResult] = []
                     for (index, result) in allResults.enumerated() {
+                        try Task.checkCancellation()
                         let prompt = AppPreferences.shared.refinePrompt
                         let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
                         refinedResults.append(TranscriptionResult(
@@ -192,7 +194,14 @@ final class TranscriptionViewModel: ObservableObject {
 
     func cancelTranscription() {
         currentTask?.cancel()
-        currentTask = nil
+        state = .cancelled
+        DispatchQueue.global().async {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            proc.arguments = ["-f", "sense-voice-main"]
+            try? proc.run()
+            proc.waitUntilExit()
+        }
     }
 
     func retryLastTranscription() {
