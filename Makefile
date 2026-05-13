@@ -22,6 +22,7 @@ run-app: build
 	cp $(BUILD_PATH)/VoiceGum $(RELEASE_APP_PATH)/Contents/MacOS/
 	cp -r $(BUILD_PATH)/VoiceGum_VoiceGum.bundle $(RELEASE_APP_PATH)/Contents/Resources/
 	cp Resources/Info.plist $(RELEASE_APP_PATH)/Contents/Info.plist
+	cp Resources/AppIcon.icns $(RELEASE_APP_PATH)/Contents/Resources/
 	open $(RELEASE_APP_PATH)
 
 install: build sign
