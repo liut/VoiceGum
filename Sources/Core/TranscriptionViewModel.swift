@@ -15,7 +15,7 @@ final class TranscriptionViewModel: ObservableObject {
 
     private var transcriptionService: TranscriptionService?
     private var currentTask: Task<Void, Never>?
-    private var lastHistoryEntryId: String?
+    private var lastHistoryEntryIds: [String] = []
 
     init() {
         setupLocalService()
@@ -142,40 +142,43 @@ final class TranscriptionViewModel: ObservableObject {
 
                 state = .transcribing(progress: 1.0, currentFile: files.count, totalFiles: files.count)
 
-                // Configure LLM once for all subsequent calls (refine + summarize)
-                if !AppPreferences.shared.llmBaseURL().isEmpty {
-                    await configureLLMClient()
-                }
+                // Save raw transcription to history first
+                await saveToHistory(results: allResults, files: files, engineDescs: engineDescs, duration: duration)
 
-                // Check if LLM refinement is needed
-                if AppPreferences.shared.autoRefineEnabled && !AppPreferences.shared.llmBaseURL().isEmpty {
-                    // Trigger refinement after a short delay to show completion first
-                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                // Configure LLM once for all subsequent calls (refine + summarize)
+                let llmConfigured = !AppPreferences.shared.llmBaseURL().isEmpty
+                if llmConfigured { await configureLLMClient() }
+
+                // Refine
+                if AppPreferences.shared.autoRefineEnabled && llmConfigured {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
 
                     state = .refining
 
                     var refinedResults: [TranscriptionResult] = []
-                    for result in allResults {
+                    for (index, result) in allResults.enumerated() {
                         let prompt = AppPreferences.shared.refinePrompt
-                    let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
+                        let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
                         refinedResults.append(TranscriptionResult(
                             text: refinedText,
                             timestamps: result.timestamps,
                             language: result.language,
                             confidence: result.confidence
                         ))
+                        if lastHistoryEntryIds.indices.contains(index) {
+                            let id = lastHistoryEntryIds[index]
+                            await HistoryManager.shared.updateRefinedText(id: id, refinedText: refinedText)
+                        }
                     }
 
                     state = .completed(results: refinedResults, files: files)
                     saveResults(refinedResults, files: files, engineDescs: engineDescs)
-                    await saveToHistory(results: refinedResults, files: files, engineDescs: engineDescs, duration: duration)
-                    if AppPreferences.shared.autoSummaryEnabled { summarize() }
                 } else {
                     state = .completed(results: allResults, files: files)
                     saveResults(allResults, files: files, engineDescs: engineDescs)
-                    await saveToHistory(results: allResults, files: files, engineDescs: engineDescs, duration: duration)
-                    if AppPreferences.shared.autoSummaryEnabled { summarize() }
                 }
+
+                if AppPreferences.shared.autoSummaryEnabled && llmConfigured { summarize() }
 
             } catch {
                 if Task.isCancelled {
@@ -222,7 +225,7 @@ final class TranscriptionViewModel: ObservableObject {
                 let prompt = AppPreferences.shared.summaryPrompt
                 let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
                 summaryText = result
-                if let id = lastHistoryEntryId {
+                if let id = lastHistoryEntryIds.first {
                     await HistoryManager.shared.updateSummary(id: id, summaryText: result)
                 }
             } catch {
@@ -272,6 +275,7 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     private func saveToHistory(results: [TranscriptionResult], files: [URL], engineDescs: [String], duration: TimeInterval?) async {
+        lastHistoryEntryIds = []
         for (index, result) in results.enumerated() {
             let fileName = files.indices.contains(index)
                 ? files[index].lastPathComponent
@@ -283,10 +287,9 @@ final class TranscriptionViewModel: ObservableObject {
                 engineDescription: engineDesc,
                 language: result.language,
                 duration: duration,
-                text: result.text,
-                summaryText: nil
+                rawText: result.text
             )
-            lastHistoryEntryId = entry.id
+            lastHistoryEntryIds.append(entry.id)
             await HistoryManager.shared.add(entry)
         }
     }

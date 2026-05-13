@@ -22,20 +22,26 @@ public actor HistoryManager {
         persist()
     }
 
+    public func updateRefinedText(id: String, refinedText: String) {
+        guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
+        let e = entries[idx]
+        entries[idx] = HistoryEntry(
+            id: e.id, sourceFileName: e.sourceFileName, timestamp: e.timestamp,
+            engineDescription: e.engineDescription, language: e.language, duration: e.duration,
+            rawText: e.rawText, refinedText: refinedText, summaryText: e.summaryText
+        )
+        persist()
+    }
+
     public func updateSummary(id: String, summaryText: String) {
-        if let idx = entries.firstIndex(where: { $0.id == id }) {
-            entries[idx] = HistoryEntry(
-                id: entries[idx].id,
-                sourceFileName: entries[idx].sourceFileName,
-                timestamp: entries[idx].timestamp,
-                engineDescription: entries[idx].engineDescription,
-                language: entries[idx].language,
-                duration: entries[idx].duration,
-                text: entries[idx].text,
-                summaryText: summaryText
-            )
-            persist()
-        }
+        guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
+        let e = entries[idx]
+        entries[idx] = HistoryEntry(
+            id: e.id, sourceFileName: e.sourceFileName, timestamp: e.timestamp,
+            engineDescription: e.engineDescription, language: e.language, duration: e.duration,
+            rawText: e.rawText, refinedText: e.refinedText, summaryText: summaryText
+        )
+        persist()
     }
 
     private func persist() {

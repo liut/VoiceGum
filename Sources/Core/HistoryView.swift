@@ -40,7 +40,7 @@ public struct HistoryView: View {
                 }
             }
         }
-        .frame(width: 400, height: 440)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 460, idealHeight: 500)
         .task { await loadEntries() }
     }
 
@@ -121,13 +121,6 @@ private struct HistoryDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button(action: {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(entry.text, forType: .string)
-                }) {
-                    Label(String(localized: "拷贝"), systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -163,25 +156,56 @@ private struct HistoryDetailView: View {
 
                     if let summary = entry.summaryText {
                         Divider()
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(String(localized: "摘要")).font(.caption).foregroundColor(.secondary)
-                            Text(summary)
-                                .font(.body)
-                                .textSelection(.enabled)
-                        }
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.05)))
+                        sectionBlock(
+                            title: String(localized: "摘要"),
+                            color: .accentColor,
+                            text: summary
+                        )
+                    }
+
+                    if entry.refinedText != nil {
+                        Divider()
+                        sectionBlock(
+                            title: String(localized: "润色后"),
+                            color: .accentColor,
+                            text: entry.displayText
+                        )
                     }
 
                     Divider()
-                    Text(entry.text)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    sectionBlock(
+                        title: entry.refinedText != nil ? String(localized: "原始转写") : String(localized: "转写内容"),
+                        color: .secondary,
+                        text: entry.rawText
+                    )
                 }
                 .padding(16)
             }
         }
-        .frame(width: 400, height: 440)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 460, idealHeight: 500)
+    }
+
+    private func sectionBlock(title: String, color: Color, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).font(.caption).foregroundColor(color)
+                Spacer()
+                Button(action: {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "拷贝"))
+            }
+            Text(text)
+                .font(.body)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.05)))
     }
 }

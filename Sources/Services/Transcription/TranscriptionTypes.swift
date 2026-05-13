@@ -21,8 +21,11 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
     public let engineDescription: String
     public let language: String?
     public let duration: TimeInterval?
-    public let text: String
+    public let rawText: String
+    public let refinedText: String?
     public let summaryText: String?
+
+    public var displayText: String { refinedText ?? rawText }
 
     public var displayTitle: String {
         if let s = summaryText, !s.isEmpty {
@@ -34,14 +37,15 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
 
     public init(id: String = UUID().uuidString, sourceFileName: String, timestamp: Date,
                 engineDescription: String, language: String?, duration: TimeInterval?,
-                text: String, summaryText: String?) {
+                rawText: String, refinedText: String? = nil, summaryText: String? = nil) {
         self.id = id
         self.sourceFileName = sourceFileName
         self.timestamp = timestamp
         self.engineDescription = engineDescription
         self.language = language
         self.duration = duration
-        self.text = text
+        self.rawText = rawText
+        self.refinedText = refinedText
         self.summaryText = summaryText
     }
 }

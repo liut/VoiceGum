@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = NSWindow(contentViewController: hostingController)
         window.title = String(localized: "历史记录")
         window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 400, height: 440))
+        window.setContentSize(NSSize(width: 480, height: 500))
         window.center()
 
         historyWindow = window
