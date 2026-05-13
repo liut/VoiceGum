@@ -86,7 +86,7 @@ struct RefiningView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
-            Text(String(localized: "Refining with LLM..."))
+            Text(String(localized: "正在润色中..."))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

@@ -314,8 +314,8 @@ extension ButtonStyle where Self == YellowButtonStyle {
 // MARK: - LLM Settings Tab
 
 struct LLMSettingsTab: View {
-    @State private var llmEnabled = AppPreferences.shared.llmEnabled
-    @State private var summaryEnabled = AppPreferences.shared.summaryEnabled
+    @State private var autoRefineEnabled = AppPreferences.shared.autoRefineEnabled
+    @State private var autoSummaryEnabled = AppPreferences.shared.autoSummaryEnabled
     @State private var llmProvider = AppPreferences.shared.llmProvider
     @State private var llmBaseURL = AppPreferences.shared.llmBaseURL()
     @State private var llmModel = AppPreferences.shared.llmModel()
@@ -345,8 +345,8 @@ struct LLMSettingsTab: View {
             }
             Section(String(localized: "任务提示词")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle(String(localized: "启用 Refine — 自动润色"), isOn: $llmEnabled)
-                        .onChange(of: llmEnabled) { AppPreferences.shared.llmEnabled = llmEnabled }
+                    Toggle(String(localized: "自动润色"), isOn: $autoRefineEnabled)
+                        .onChange(of: autoRefineEnabled) { AppPreferences.shared.autoRefineEnabled = autoRefineEnabled }
                     Text(String(localized: "Refine — 润色转写文字")).font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $refinePrompt)
                         .font(.system(size: 12, design: .monospaced))
@@ -354,8 +354,8 @@ struct LLMSettingsTab: View {
                         .onChange(of: refinePrompt) { AppPreferences.shared.refinePrompt = refinePrompt }
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle(String(localized: "启用 Summary — 显示摘要按钮"), isOn: $summaryEnabled)
-                        .onChange(of: summaryEnabled) { AppPreferences.shared.summaryEnabled = summaryEnabled }
+                    Toggle(String(localized: "自动摘要"), isOn: $autoSummaryEnabled)
+                        .onChange(of: autoSummaryEnabled) { AppPreferences.shared.autoSummaryEnabled = autoSummaryEnabled }
                     Text(String(localized: "Summary — 生成全文摘要")).font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $summaryPrompt)
                         .font(.system(size: 12, design: .monospaced))
@@ -375,8 +375,8 @@ struct LLMSettingsTab: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            llmEnabled = AppPreferences.shared.llmEnabled
-            summaryEnabled = AppPreferences.shared.summaryEnabled
+            autoRefineEnabled = AppPreferences.shared.autoRefineEnabled
+            autoSummaryEnabled = AppPreferences.shared.autoSummaryEnabled
             llmProvider = AppPreferences.shared.llmProvider
             refinePrompt = AppPreferences.shared.refinePrompt
             summaryPrompt = AppPreferences.shared.summaryPrompt

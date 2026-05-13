@@ -4,27 +4,17 @@ import VoiceGumPreferences
 
 public struct MainView: View {
     @StateObject private var viewModel = TranscriptionViewModel()
-    private let onOpenHistory: (() -> Void)?
 
-    public init(onOpenHistory: (() -> Void)? = nil) {
-        self.onOpenHistory = onOpenHistory
+    public init() {}
+
+    private func isLLMConfigured() -> Bool {
+        let provider = AppPreferences.shared.llmProvider
+        if provider == "ollama" { return true }
+        return !AppPreferences.shared.llmAPIKey().isEmpty
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Header
-            if let onOpenHistory {
-                HStack {
-                    Spacer()
-                    Button(action: onOpenHistory) {
-                        Label(String(localized: "历史"), systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            }
-
             // Drop zone / File info area
             DropZoneView(
                 fileURL: $viewModel.droppedFileURL
@@ -68,7 +58,7 @@ public struct MainView: View {
                         results: results,
                         onCopy: { viewModel.copyToClipboard() },
                         onNew: { viewModel.reset() },
-                        onSummarize: AppPreferences.shared.summaryEnabled ? { viewModel.summarize() } : nil,
+                        onSummarize: isLLMConfigured() ? { viewModel.summarize() } : nil,
                         summaryText: viewModel.summaryText,
                         isSummarizing: viewModel.isSummarizing
                     )

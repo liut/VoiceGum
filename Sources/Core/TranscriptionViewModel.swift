@@ -142,8 +142,13 @@ final class TranscriptionViewModel: ObservableObject {
 
                 state = .transcribing(progress: 1.0, currentFile: files.count, totalFiles: files.count)
 
+                // Configure LLM once for all subsequent calls (refine + summarize)
+                if !AppPreferences.shared.llmBaseURL().isEmpty {
+                    await configureLLMClient()
+                }
+
                 // Check if LLM refinement is needed
-                if AppPreferences.shared.llmEnabled && !AppPreferences.shared.llmBaseURL().isEmpty {
+                if AppPreferences.shared.autoRefineEnabled && !AppPreferences.shared.llmBaseURL().isEmpty {
                     // Trigger refinement after a short delay to show completion first
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
 
@@ -164,10 +169,12 @@ final class TranscriptionViewModel: ObservableObject {
                     state = .completed(results: refinedResults, files: files)
                     saveResults(refinedResults, files: files, engineDescs: engineDescs)
                     await saveToHistory(results: refinedResults, files: files, engineDescs: engineDescs, duration: duration)
+                    if AppPreferences.shared.autoSummaryEnabled { summarize() }
                 } else {
                     state = .completed(results: allResults, files: files)
                     saveResults(allResults, files: files, engineDescs: engineDescs)
                     await saveToHistory(results: allResults, files: files, engineDescs: engineDescs, duration: duration)
+                    if AppPreferences.shared.autoSummaryEnabled { summarize() }
                 }
 
             } catch {
@@ -198,10 +205,6 @@ final class TranscriptionViewModel: ObservableObject {
 
     func summarize() {
         guard case .completed(let results, _) = state, !isSummarizing else { return }
-        guard AppPreferences.shared.summaryEnabled else {
-            summaryText = "摘要功能未启用，请在设置中开启"
-            return
-        }
         let baseURL = AppPreferences.shared.llmBaseURL()
         guard !baseURL.isEmpty else {
             summaryText = "摘要失败: Base URL 为空 provider=\(AppPreferences.shared.llmProvider)"
@@ -216,20 +219,6 @@ final class TranscriptionViewModel: ObservableObject {
 
         Task {
             do {
-                let baseURLString = AppPreferences.shared.llmBaseURL()
-                guard let baseURL = URL(string: baseURLString) else {
-                    summaryText = "摘要失败: 无效的 Base URL"
-                    isSummarizing = false
-                    return
-                }
-                let provider: LLMProvider = switch AppPreferences.shared.llmProvider {
-                case "anthropic": .anthropic
-                case "ollama": .ollama
-                default: .openai
-                }
-                let apiKey = AppPreferences.shared.llmAPIKey()
-                await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
-
                 let prompt = AppPreferences.shared.summaryPrompt
                 let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
                 summaryText = result
@@ -300,6 +289,17 @@ final class TranscriptionViewModel: ObservableObject {
             lastHistoryEntryId = entry.id
             await HistoryManager.shared.add(entry)
         }
+    }
+
+    private func configureLLMClient() async {
+        guard let baseURL = URL(string: AppPreferences.shared.llmBaseURL()) else { return }
+        let provider: LLMProvider = switch AppPreferences.shared.llmProvider {
+        case "anthropic": .anthropic
+        case "ollama": .ollama
+        default: .openai
+        }
+        let apiKey = AppPreferences.shared.llmAPIKey()
+        await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
     }
 
     private func captureDuration(_ fileURL: URL) async -> TimeInterval? {

@@ -14,7 +14,6 @@ public final class AppPreferences: @unchecked Sendable {
         static let volcAppId = "voicegum.volcAppId"
         static let volcResourceId = "voicegum.volcResourceId"
         static let volcAccessToken = "voicegum.volcAccessToken"
-        static let llmEnabled = "voicegum.llmEnabled"
         static let llmProvider = "voicegum.llmProvider"
     }
 
@@ -64,14 +63,14 @@ public final class AppPreferences: @unchecked Sendable {
 
     // MARK: - LLM (global)
 
-    public var llmEnabled: Bool {
-        get { defaults.bool(forKey: Keys.llmEnabled) }
-        set { defaults.set(newValue, forKey: Keys.llmEnabled) }
+    public var autoRefineEnabled: Bool {
+        get { defaults.bool(forKey: "voicegum.llm.autoRefineEnabled") }
+        set { defaults.set(newValue, forKey: "voicegum.llm.autoRefineEnabled") }
     }
 
-    public var summaryEnabled: Bool {
-        get { defaults.object(forKey: "voicegum.llm.summaryEnabled") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "voicegum.llm.summaryEnabled") }
+    public var autoSummaryEnabled: Bool {
+        get { defaults.bool(forKey: "voicegum.llm.autoSummaryEnabled") }
+        set { defaults.set(newValue, forKey: "voicegum.llm.autoSummaryEnabled") }
     }
 
     public var llmProvider: String {

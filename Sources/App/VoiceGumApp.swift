@@ -7,7 +7,7 @@ struct VoiceGumApp: App {
 
     var body: some Scene {
         Window("VoiceGum", id: "main") {
-            MainView(onOpenHistory: { appDelegate.openHistory() })
+            MainView()
                 .frame(minWidth: 400, idealWidth: 480, minHeight: 360, idealHeight: 420)
         }
         .windowResizability(.contentMinSize)
@@ -26,6 +26,10 @@ struct VoiceGumApp: App {
                     appDelegate.showSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
+                Button(String(localized: "历史记录")) {
+                    appDelegate.openHistory()
+                }
+                .keyboardShortcut("y", modifiers: .command)
             }
         }
     }

@@ -265,6 +265,14 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声ファイルを選択またはドロップして開始" } }
       }
     },
+    "正在润色中..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在润色中..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在潤色中..." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refining..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集中..." } }
+      }
+    },
     "松开以添加" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "松开以添加" } },
