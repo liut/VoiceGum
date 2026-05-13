@@ -43,13 +43,7 @@ public final class QwenASRService: @unchecked Sendable, TranscriptionService {
         await Logger.shared.info("Qwen3-ASR 转写: file=\(file.lastPathComponent), lang=\(language)")
 
         // Convert to 16kHz WAV if needed
-        let wavFile: URL
-        let ext = file.pathExtension.lowercased()
-        if ext == "wav" {
-            wavFile = file
-        } else {
-            wavFile = try await convertTo16kHzWav(file)
-        }
+        let wavFile = try await AudioConverter.convertTo16kHzWav(file)
 
         // Set language
         let langStr = qwenLangCode(language)
@@ -58,9 +52,10 @@ public final class QwenASRService: @unchecked Sendable, TranscriptionService {
         }
 
         // Transcribe (blocking call on a background thread)
+        let ctxPtr = ctx
         let text: String = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global().async {
-                guard let result = qwen_transcribe(ctx, wavFile.path) else {
+                guard let result = qwen_transcribe(ctxPtr, wavFile.path) else {
                     continuation.resume(throwing: TranscriptionError.transcriptionFailed("Qwen3-ASR 转写返回空"))
                     return
                 }
@@ -100,11 +95,5 @@ public final class QwenASRService: @unchecked Sendable, TranscriptionService {
         case "ko": return "Korean"
         default: return ""
         }
-    }
-
-    private let audioConverter = LocalTranscriptionService(modelId: "")
-
-    private func convertTo16kHzWav(_ file: URL) async throws -> URL {
-        return try await audioConverter.convertToWavIfNeeded(file)
     }
 }

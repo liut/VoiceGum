@@ -174,5 +174,5 @@ iOSInjectionProject/
 # End of https://www.toptal.com/developers/gitignore/api/macos,swift,cmake,c++
 Frameworks/
 fbank_lfr_cmvn_feature.json
-
+todos/
 *.local.*

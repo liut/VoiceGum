@@ -10,7 +10,6 @@ public final class AppPreferences: @unchecked Sendable {
         static let asrProvider = "voicegum.asrProvider"
         static let asrModel = "voicegum.asrModel"
         static let asrAPIURL = "voicegum.asrAPIURL"
-        static let asrAPIKey = "voicegum.asrAPIKey"
         static let llmEnabled = "voicegum.llmEnabled"
         static let llmProvider = "voicegum.llmProvider"
         static let llmBaseURL = "voicegum.llmBaseURL"
@@ -37,11 +36,6 @@ public final class AppPreferences: @unchecked Sendable {
     public var asrAPIURL: String {
         get { defaults.string(forKey: Keys.asrAPIURL) ?? "https://api.openai.com/v1" }
         set { defaults.set(newValue, forKey: Keys.asrAPIURL) }
-    }
-
-    public var asrAPIKey: String {
-        get { defaults.string(forKey: Keys.asrAPIKey) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.asrAPIKey) }
     }
 
     public var llmEnabled: Bool {

@@ -159,19 +159,32 @@ struct ErrorView: View {
     let onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .font(.system(size: 32))
                 .foregroundColor(.orange)
 
-            Text(error.localizedDescription)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            ScrollView {
+                Text(error.localizedDescription)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 200)
 
-            Button("Retry", action: onRetry)
+            HStack(spacing: 8) {
+                Button("拷贝") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(error.localizedDescription, forType: .string)
+                }
                 .buttonStyle(.bordered)
+                Button("重试", action: onRetry)
+                    .buttonStyle(.bordered)
+            }
         }
+        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

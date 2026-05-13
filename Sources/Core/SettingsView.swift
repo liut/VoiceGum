@@ -34,13 +34,12 @@ struct ASRSettingsTab: View {
     @State private var selectedModel = AppPreferences.shared.asrModel
     @State private var apiURL = AppPreferences.shared.asrAPIURL
     @State private var apiKey = ""
-    @State private var saveSuccess = false
     @State private var expandedFamilies: Set<String> = []
 
     let onlineModels = [("whisper-1", "Whisper v1"), ("whisper-large", "Whisper Large v3")]
 
     let modelFamilies: [ModelFamily] = [
-        ModelFamily(id: "sensevoice", name: "SenseVoice Small", icon: "ear.and.waveform",
+        ModelFamily(id: "sensevoice", name: "SenseVoice", icon: "ear.and.waveform",
             description: "多语言识别 · 中文/英文/粤语/日语/韩语 · Metal加速",
             tags: ["本地", "GPU", "GGUF"],
             models: allModels.filter { $0.id.hasPrefix("sense-voice") }),
@@ -53,6 +52,21 @@ struct ASRSettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // Current engine status
+                HStack(spacing: 8) {
+                    Image(systemName: providerType == "online" ? "cloud" : "internaldrive")
+                        .foregroundColor(.secondary)
+                    Text(providerType == "online" ? "在线 API" : "本地模型")
+                        .font(.subheadline).fontWeight(.medium)
+                    if providerType == "local", let m = allModels.first(where: { $0.id == selectedModel }),
+                       let family = modelFamilies.first(where: { $0.models.contains(where: { $0.id == selectedModel }) }) {
+                        Text("·").foregroundColor(.secondary)
+                        Text("\(family.name) \(m.displayName)").font(.subheadline).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+
                 HStack {
                     Picker("模式", selection: $providerType) {
                         Text("在线 API").tag("online")
@@ -70,8 +84,17 @@ struct ASRSettingsTab: View {
                 if providerType == "online" {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("API 配置").font(.headline)
-                        TextField("API URL", text: $apiURL).textFieldStyle(.roundedBorder)
-                        SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
+                        TextField("API URL", text: $apiURL)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: apiURL) { AppPreferences.shared.asrAPIURL = apiURL }
+                        SecureField("API Key", text: $apiKey)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: apiKey) {
+                                Task {
+                                    if apiKey.isEmpty { try? await KeychainManager.shared.deleteASRAPIKey() }
+                                    else { try? await KeychainManager.shared.saveASRAPIKey(apiKey) }
+                                }
+                            }
                     }
                     .padding()
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
@@ -96,9 +119,6 @@ struct ASRSettingsTab: View {
                 if let error = ds.downloadError {
                     Text(error).foregroundColor(.red).font(.caption)
                 }
-
-                Button("保存") { saveSettings() }.buttonStyle(.bordered)
-                if saveSuccess { Text("保存成功!").foregroundColor(.green).font(.caption) }
             }
             .padding(16)
         }
@@ -116,19 +136,6 @@ struct ASRSettingsTab: View {
 
     private func loadAPIKey() {
         Task { if let key = try? await KeychainManager.shared.readASRAPIKey() { apiKey = key } }
-    }
-
-    private func saveSettings() {
-        AppPreferences.shared.asrProvider = providerType
-        AppPreferences.shared.asrModel = selectedModel
-        AppPreferences.shared.asrAPIURL = apiURL
-        Task {
-            if apiKey.isEmpty { try? await KeychainManager.shared.deleteASRAPIKey() }
-            else { try? await KeychainManager.shared.saveASRAPIKey(apiKey) }
-            saveSuccess = true
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            saveSuccess = false
-        }
     }
 }
 

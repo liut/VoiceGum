@@ -52,35 +52,47 @@ public actor ModelDownloadManager {
         }
     }
 
-    private let modelsDirectory: URL
     private let session: URLSession
 
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        modelsDirectory = appSupport.appendingPathComponent("VoiceGum/Models", isDirectory: true)
+        try? FileManager.default.createDirectory(at: Self.modelsURL, withIntermediateDirectories: true)
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 3600
         session = URLSession(configuration: config)
     }
 
-    public func getModelsDirectory() -> URL { modelsDirectory }
+    public static let modelsURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!.appendingPathComponent("VoiceGum/Models")
+    }()
 
-    public func ensureDirectoryExists() throws {
-        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+    public nonisolated func getModelsDirectory() -> URL { Self.modelsURL }
+
+    public nonisolated func ensureDirectoryExists() throws {
+        try FileManager.default.createDirectory(at: Self.modelsURL, withIntermediateDirectories: true)
     }
 
-    public func isModelDownloaded(_ modelId: String) -> Bool {
-        let modelPath = modelsDirectory.appendingPathComponent(modelId)
+    public nonisolated func isModelDownloaded(_ modelId: String) -> Bool {
+        let modelPath = Self.modelsURL.appendingPathComponent(modelId)
         guard FileManager.default.fileExists(atPath: modelPath.path) else { return false }
+        // Qwen3-ASR: check for safetensors + config files
+        if modelId.hasPrefix("qwen3") {
+            let required = ["config.json", "vocab.json", "merges.txt"]
+            let hasModel = FileManager.default.fileExists(atPath: modelPath.appendingPathComponent("model.safetensors").path)
+                || FileManager.default.fileExists(atPath: modelPath.appendingPathComponent("model.safetensors.index.json").path)
+            guard hasModel else { return false }
+            return required.allSatisfy { FileManager.default.fileExists(atPath: modelPath.appendingPathComponent($0).path) }
+        }
+        // GGUF: check for non-part files
         if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) {
-            return contents.contains(where: { !$0.hasSuffix(".part") })
+            return contents.contains(where: { !$0.hasSuffix(".part") && !$0.hasPrefix(".") })
         }
         return false
     }
 
     public func partialDownloadInfo(_ modelId: String, expectedSize: Int64) -> (downloadedBytes: Int64, progress: Double)? {
-        let modelPath = modelsDirectory.appendingPathComponent(modelId)
+        let modelPath = Self.modelsURL.appendingPathComponent(modelId)
         guard FileManager.default.fileExists(atPath: modelPath.path) else { return nil }
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) else { return nil }
         let partFiles = contents.filter { $0.hasSuffix(".part") }
@@ -99,7 +111,7 @@ public actor ModelDownloadManager {
     }
 
     public func deleteModel(_ modelId: String) throws {
-        let modelPath = modelsDirectory.appendingPathComponent(modelId)
+        let modelPath = Self.modelsURL.appendingPathComponent(modelId)
         if FileManager.default.fileExists(atPath: modelPath.path) {
             try FileManager.default.removeItem(at: modelPath)
         }
@@ -111,7 +123,7 @@ public actor ModelDownloadManager {
     ) async throws {
         try ensureDirectoryExists()
 
-        let modelDir = modelsDirectory.appendingPathComponent(model.id)
+        let modelDir = Self.modelsURL.appendingPathComponent(model.id)
         try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
 
         let filesToDownload = model.hfFiles
@@ -269,7 +281,7 @@ public actor ModelDownloadManager {
 
 public let allModels: [ModelInfo] = [
     ModelInfo(
-        id: "sense-voice-q8-0", displayName: "Small Q8_0",
+        id: "sense-voice-q8-0", displayName: "Small Q8_0 量化",
         fileSize: 230_000_000, sizeLabel: "~230 MB",
         hfRepo: "lovemefan/sense-voice-gguf",
         msRepo: "lovemefan/SenseVoiceGGUF",
@@ -294,14 +306,14 @@ public let allModels: [ModelInfo] = [
         id: "qwen3-asr-0.6b", displayName: "Qwen3-ASR 0.6B",
         fileSize: 1_200_000_000, sizeLabel: "~1.2 GB",
         hfRepo: "Qwen/Qwen3-ASR-0.6B",
-        msRepo: "",
+        msRepo: "Qwen/Qwen3-ASR-0.6B",
         hfFiles: ["config.json", "model.safetensors", "vocab.json", "merges.txt", "generation_config.json"]
     ),
     ModelInfo(
         id: "qwen3-asr-1.7b", displayName: "Qwen3-ASR 1.7B",
         fileSize: 3_400_000_000, sizeLabel: "~3.4 GB",
         hfRepo: "Qwen/Qwen3-ASR-1.7B",
-        msRepo: "",
+        msRepo: "Qwen/Qwen3-ASR-1.7B",
         hfFiles: ["config.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors", "model.safetensors.index.json", "vocab.json", "merges.txt", "generation_config.json"]
     ),
 ]

@@ -84,7 +84,7 @@ public struct LocalTranscriptionService: TranscriptionService {
         await Logger.shared.info("引擎路径: \(binary.path)")
 
         // Convert to 16kHz WAV if needed
-        let wavFile = try await convertToWavIfNeeded(file)
+        let wavFile = try await AudioConverter.convertTo16kHzWav(file)
 
         // FP32 too large for GPU; flash-attn degrades quality on Small model (4 heads)
         let useGPU = !modelId.contains("fp32")
@@ -146,7 +146,13 @@ public struct LocalTranscriptionService: TranscriptionService {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if text.isEmpty {
-                    let msg = "转写无输出, stderr: \(errOutput.prefix(200))"
+                    let cmd = "sense-voice-main \(args.dropFirst().joined(separator: " "))"
+                    let msg = """
+                    转写无输出 — VAD 未检测到语音段
+                    建议: 尝试 FP16/Q8_0 模型，或音频超过60秒建议换用 Qwen3-ASR
+                    命令行: \(cmd)
+                    stderr: \(errOutput)
+                    """
                     Task { await Logger.shared.error(msg) }
                     continuation.resume(throwing: TranscriptionError.transcriptionFailed(msg))
                     return
@@ -161,159 +167,6 @@ public struct LocalTranscriptionService: TranscriptionService {
                 ))
             }
         }
-    }
-
-    func convertToWavIfNeeded(_ file: URL) async throws -> URL {
-        let ext = file.pathExtension.lowercased()
-
-        // Always go through normalize path so VAD can detect soft speech
-        guard ext != "wav" else {
-            return try await normalizeWavVolume(file)
-        }
-
-        await Logger.shared.info("转换音频格式: \(ext) → wav")
-
-        // Read with AVAssetReader, write raw PCM to WAV file
-        let asset = AVAsset(url: file)
-
-        // Use async loading API
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        guard let track = tracks.first else {
-            throw TranscriptionError.invalidAudioFormat
-        }
-
-        // Use AVAssetReader to decode to PCM
-        let outputSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-        ]
-
-        guard let reader = try? AVAssetReader(asset: asset) else {
-            throw TranscriptionError.invalidAudioFormat
-        }
-        let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
-        reader.add(readerOutput)
-        guard reader.startReading() else {
-            throw TranscriptionError.transcriptionFailed("无法读取音频")
-        }
-
-        let wavFile = FileManager.default.temporaryDirectory.appendingPathComponent("voicegum_\(UUID().uuidString).wav")
-
-        // Write as 16kHz 16-bit mono WAV
-        var samples = Data()
-        while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
-            guard let blockBuffer = sampleBuffer.dataBuffer else { continue }
-            var length = 0
-            var dataPointer: UnsafeMutablePointer<Int8>?
-            CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: nil, dataPointerOut: &dataPointer)
-            if let ptr = dataPointer {
-                samples.append(UnsafeRawPointer(ptr).assumingMemoryBound(to: UInt8.self), count: length)
-            }
-        }
-
-        guard reader.status == .completed else {
-            throw TranscriptionError.transcriptionFailed("音频读取不完整")
-        }
-
-        // Normalize volume so VAD can detect soft speech
-        let normalized = normalizeVolume(samples)
-        try writeWAVFile(normalized, to: wavFile)
-
-        await Logger.shared.info("转换完成: \(wavFile.path) (\(samples.count) bytes PCM)")
-        return wavFile
-    }
-
-    private func writeWAVFile(_ pcmData: Data, to url: URL) throws {
-        let sampleRate: UInt32 = 16000
-        let numChannels: UInt16 = 1
-        let bitsPerSample: UInt16 = 16
-        let byteRate = sampleRate * UInt32(numChannels) * UInt32(bitsPerSample / 8)
-        let blockAlign = numChannels * (bitsPerSample / 8)
-        let dataSize = UInt32(pcmData.count)
-
-        var wav = Data()
-        // RIFF header
-        wav.append("RIFF".data(using: .ascii)!)
-        var riffSize = UInt32(36 + pcmData.count).littleEndian
-        wav.append(Data(bytes: &riffSize, count: 4))
-        wav.append("WAVE".data(using: .ascii)!)
-        // fmt chunk
-        wav.append("fmt ".data(using: .ascii)!)
-        var fmtSize = UInt32(16).littleEndian
-        wav.append(Data(bytes: &fmtSize, count: 4))
-        var formatTag = UInt16(1).littleEndian  // PCM
-        wav.append(Data(bytes: &formatTag, count: 2))
-        var channels = numChannels.littleEndian
-        wav.append(Data(bytes: &channels, count: 2))
-        var sr = sampleRate.littleEndian
-        wav.append(Data(bytes: &sr, count: 4))
-        var br = byteRate.littleEndian
-        wav.append(Data(bytes: &br, count: 4))
-        var ba = blockAlign.littleEndian
-        wav.append(Data(bytes: &ba, count: 2))
-        var bps = bitsPerSample.littleEndian
-        wav.append(Data(bytes: &bps, count: 2))
-        // data chunk
-        wav.append("data".data(using: .ascii)!)
-        var ds = dataSize.littleEndian
-        wav.append(Data(bytes: &ds, count: 4))
-        // PCM data
-        wav.append(pcmData)
-
-        try wav.write(to: url)
-    }
-
-    // RMS-based volume normalization so ggml's energy VAD can detect soft speech
-    private func normalizeVolume(_ pcm: Data) -> Data {
-        let samples = pcm.count / 2
-        guard samples > 0 else { return pcm }
-
-        // Calculate RMS
-        var sumSq: Double = 0
-        var peak: Int16 = 0
-        pcm.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-            let int16 = ptr.bindMemory(to: Int16.self)
-            for i in 0..<samples {
-                let s = int16[i]
-                sumSq += Double(s) * Double(s)
-                peak = max(peak, abs(s))
-            }
-        }
-        let rms = sqrt(sumSq / Double(samples))
-
-        // Target RMS so ggml's energy-based VAD can detect soft/fast speech
-        let targetRMS: Double = 7000
-        let maxGain: Double = 8.0
-        let gain = rms > 0 ? min(targetRMS / rms, maxGain) : 1.0
-        guard gain > 1.05 else { return pcm }
-
-        var result = Data(capacity: pcm.count)
-        pcm.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-            let int16 = ptr.bindMemory(to: Int16.self)
-            for i in 0..<samples {
-                let v = Double(int16[i]) * gain
-                let clamped = max(Double(Int16.min), min(Double(Int16.max), v))
-                var s = Int16(clamped)
-                result.append(Data(bytes: &s, count: 2))
-            }
-        }
-        return result
-    }
-
-    private func normalizeWavVolume(_ file: URL) async throws -> URL {
-        let data = try Data(contentsOf: file)
-        // Skip 44-byte WAV header to get raw PCM
-        guard data.count > 44 else { return file }
-        let pcm = data.subdata(in: 44..<data.count)
-        let normalized = normalizeVolume(pcm)
-        guard normalized != pcm else { return file }
-        let outFile = FileManager.default.temporaryDirectory.appendingPathComponent("voicegum_\(UUID().uuidString).wav")
-        try writeWAVFile(normalized, to: outFile)
-        return outFile
     }
 
     private func langCode(_ lang: String) -> String {

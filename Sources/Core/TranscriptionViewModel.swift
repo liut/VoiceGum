@@ -3,6 +3,7 @@ import AVFoundation
 import AppKit
 import VoiceGumServices
 import VoiceGumPreferences
+import VoiceGumKeychain
 
 @MainActor
 final class TranscriptionViewModel: ObservableObject {
@@ -14,67 +15,57 @@ final class TranscriptionViewModel: ObservableObject {
     private var currentTask: Task<Void, Never>?
 
     init() {
-        setupTranscriptionService()
+        setupLocalService()
     }
 
-    private func setupTranscriptionService() {
+    private func setupLocalService() {
+        guard AppPreferences.shared.asrProvider != "online" else { return }
+        guard isModelDownloaded(AppPreferences.shared.asrModel) else { return }
+        let modelId = AppPreferences.shared.asrModel
+        if modelId.hasPrefix("qwen3") {
+            let size: QwenASRService.QwenASRModelSize = modelId.contains("1.7b") ? .large : .small
+            let svc = QwenASRService(modelSize: size)
+            try? svc.loadModel()
+            transcriptionService = svc
+        } else {
+            transcriptionService = LocalTranscriptionService(modelId: modelId)
+        }
+    }
+
+    private func setupTranscriptionService() async {
         let provider = AppPreferences.shared.asrProvider
         switch provider {
         case "online":
             let baseURL = URL(string: AppPreferences.shared.asrAPIURL) ?? URL(string: "https://api.openai.com/v1")!
-            let apiKey = AppPreferences.shared.asrAPIKey.isEmpty ? nil : AppPreferences.shared.asrAPIKey
+            let apiKey = (try? await KeychainManager.shared.readASRAPIKey()).flatMap { $0.isEmpty ? nil : $0 }
             transcriptionService = OnlineAPITranscription(baseURL: baseURL, apiKey: apiKey, model: AppPreferences.shared.asrModel)
         default:
-            // Local model - check if downloaded then use appropriate engine
-            guard isModelDownloaded(AppPreferences.shared.asrModel) else {
-                transcriptionService = nil
-                return
-            }
-            let modelId = AppPreferences.shared.asrModel
-            if modelId.hasPrefix("qwen3") {
-                let size: QwenASRService.QwenASRModelSize = modelId.contains("1.7b") ? .large : .small
-                let svc = QwenASRService(modelSize: size)
-                try? svc.loadModel()
-                transcriptionService = svc
-            } else {
-                transcriptionService = LocalTranscriptionService(modelId: modelId)
-            }
+            setupLocalService()
         }
     }
 
     private func isModelDownloaded(_ modelId: String) -> Bool {
-        let modelsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!.appendingPathComponent("VoiceGum/Models/\(modelId)")
-        guard FileManager.default.fileExists(atPath: modelsDir.path) else { return false }
-        // Qwen3-ASR: check for safetensors + config
-        if modelId.hasPrefix("qwen3") {
-            let required = ["config.json", "model.safetensors", "vocab.json", "merges.txt"]
-            let hasSafetensors = FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent("model.safetensors").path)
-            let hasIndex = FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent("model.safetensors.index.json").path)
-            if hasSafetensors || hasIndex {
-                return required.allSatisfy { FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent($0).path) }
-            }
-            return false
-        }
-        // GGUF: check for non-empty directory
-        if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path) {
-            return contents.contains(where: { !$0.hasSuffix(".part") && !$0.hasPrefix(".") })
-        }
-        return false
+        ModelDownloadManager.shared.isModelDownloaded(modelId)
     }
 
     func startTranscription() {
         guard let fileURL = droppedFileURL else { return }
 
-        // Re-setup service so freshly downloaded models are detected
-        setupTranscriptionService()
-
         currentTask = Task {
+            // Re-setup service so freshly downloaded models are detected
+            await setupTranscriptionService()
             do {
                 state = .validating(file: fileURL)
 
                 guard AudioFileValidator.isValid(file: fileURL) else {
-                    state = .failed(error: TranscriptionError.invalidAudioFormat)
+                    let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64) ?? 0
+                    if size > AudioFileValidator.maxFileSize {
+                        let mb = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+                        let maxMB = ByteCountFormatter.string(fromByteCount: AudioFileValidator.maxFileSize, countStyle: .file)
+                        state = .failed(error: TranscriptionError.transcriptionFailed("文件过大 (\(mb))，上限 \(maxMB)"))
+                    } else {
+                        state = .failed(error: TranscriptionError.invalidAudioFormat)
+                    }
                     return
                 }
 
@@ -198,9 +189,4 @@ final class TranscriptionViewModel: ObservableObject {
         }
     }
 
-    func triggerRefinement() {
-        // This can be called when Fn key is released
-        // Currently refinement is automatic after transcription
-        // This method exists for potential manual trigger
-    }
 }
