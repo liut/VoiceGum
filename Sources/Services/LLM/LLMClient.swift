@@ -34,14 +34,19 @@ public enum LLMProvider: String, CaseIterable, Sendable {
 
 public enum LLMClientError: LocalizedError {
     case notConfigured
-    case requestFailed
-    case invalidResponse
+    case requestFailed(statusCode: Int, body: String)
+    case decodeFailed(String)
+    case networkFailed(String)
 
     public var errorDescription: String? {
         switch self {
-        case .notConfigured: return "LLM not configured"
-        case .requestFailed: return "LLM request failed"
-        case .invalidResponse: return "Invalid LLM response"
+        case .notConfigured: return "LLM 未配置"
+        case .requestFailed(let code, let body):
+            return "HTTP \(code): \(body.prefix(500))"
+        case .decodeFailed(let detail):
+            return "解析响应失败: \(detail)"
+        case .networkFailed(let detail):
+            return "网络错误: \(detail)"
         }
     }
 }
@@ -71,60 +76,189 @@ public actor LLMClient {
         return true
     }
 
-    public func refine(text: String) async throws -> String {
+    /// Appends path to base URL, skipping duplicate leading segment if base URL's last path component matches.
+    private nonisolated func buildURL(base: URL, path: String) -> URL {
+        let baseLast = base.lastPathComponent
+        let pathFirst = path.split(separator: "/").first.map(String.init) ?? ""
+        if !baseLast.isEmpty && baseLast == pathFirst {
+            let rest = path.split(separator: "/").dropFirst().joined(separator: "/")
+            return base.appendingPathComponent(rest)
+        }
+        return base.appendingPathComponent(path)
+    }
+
+    public func refine(text: String, customPrompt: String? = nil) async throws -> String {
         guard let baseURL = baseURL else {
             throw LLMClientError.notConfigured
         }
 
-        var request = URLRequest(url: baseURL.appendingPathComponent("v1/chat/completions"))
+        let defaultPrompt = "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
+        let systemPrompt = (customPrompt?.isEmpty == false) ? customPrompt! : defaultPrompt
+        let userPrompt = "Please refine this text:\n\n\(text)"
+
+        switch provider {
+        case .ollama:
+            return try await ollamaRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+        case .anthropic:
+            return try await anthropicRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+        default:
+            return try await openaiRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+        }
+    }
+
+    private func openaiRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+        let url = buildURL(base: baseURL, path: "chat/completions")
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if provider.requiresAPIKey, let apiKey = apiKey, !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if let key = apiKey, !key.isEmpty {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
-
-        let systemPrompt = "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
-        let userPrompt = "Please refine this text:\n\n\(text)"
 
         struct ChatRequest: Encodable {
             let model: String
             let messages: [Message]
             let temperature: Double = 0.7
-
-            struct Message: Encodable {
-                let role: String
-                let content: String
-            }
+            struct Message: Encodable { let role: String; let content: String }
         }
 
-        let payload = ChatRequest(
-            model: model,
-            messages: [
-                ChatRequest.Message(role: "system", content: systemPrompt),
-                ChatRequest.Message(role: "user", content: userPrompt)
-            ]
-        )
-        request.httpBody = try JSONEncoder().encode(payload)
+        let payload = ChatRequest(model: model, messages: [
+            ChatRequest.Message(role: "system", content: systemPrompt),
+            ChatRequest.Message(role: "user", content: userPrompt)
+        ])
+        do { request.httpBody = try JSONEncoder().encode(payload) }
+        catch { throw LLMClientError.networkFailed("编码请求失败: \(error.localizedDescription)") }
+        await Logger.shared.info("OpenAI 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: request) }
+        catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw LLMClientError.requestFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LLMClientError.networkFailed("无 HTTP 响应")
         }
-
-        struct Response: Decodable {
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<empty>"
+            await Logger.shared.info("OpenAI 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
+        }
+        await Logger.shared.info("OpenAI 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        struct Resp: Decodable {
             let choices: [Choice]
-            struct Choice: Decodable {
-                let message: Message
-                struct Message: Decodable {
-                    let content: String
-                }
-            }
+            struct Choice: Decodable { let message: Msg; struct Msg: Decodable { let content: String } }
+        }
+        do {
+            let resp = try JSONDecoder().decode(Resp.self, from: data)
+            let text = resp.choices.first?.message.content ?? userPrompt
+            await Logger.shared.info("OpenAI 测试成功: \(text.prefix(200))")
+            return text
+        } catch {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(500))")
+        }
+    }
+
+    private func anthropicRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+        let url = buildURL(base: baseURL, path: "v1/messages")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let key = apiKey, !key.isEmpty {
+            request.setValue(key, forHTTPHeaderField: "x-api-key")
+        }
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+
+        struct AnthropicReq: Encodable {
+            let model: String
+            let max_tokens: Int = 4096
+            let system: String
+            let messages: [Message]
+            struct Message: Encodable { let role: String; let content: String }
         }
 
-        let result = try JSONDecoder().decode(Response.self, from: data)
-        return result.choices.first?.message.content ?? text
+        let payload = AnthropicReq(model: model, system: systemPrompt, messages: [
+            AnthropicReq.Message(role: "user", content: userPrompt)
+        ])
+        do { request.httpBody = try JSONEncoder().encode(payload) }
+        catch { throw LLMClientError.networkFailed("编码请求失败: \(error.localizedDescription)") }
+        await Logger.shared.info("Anthropic 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
+
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: request) }
+        catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LLMClientError.networkFailed("无 HTTP 响应")
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<empty>"
+            await Logger.shared.info("Anthropic 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
+        }
+        await Logger.shared.info("Anthropic 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        struct AnthropicResp: Decodable {
+            let content: [Block]
+            struct Block: Decodable {
+                let type: String?
+                let text: String?
+            }
+        }
+        do {
+            let resp = try JSONDecoder().decode(AnthropicResp.self, from: data)
+            // Collect text from all blocks, skip thinking blocks
+            let texts = resp.content.compactMap { $0.text }
+            return texts.isEmpty ? userPrompt : texts.joined(separator: "\n")
+        } catch {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(300))")
+        }
+    }
+
+    private func ollamaRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+        let url = buildURL(base: baseURL, path: "api/chat")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        struct OllamaReq: Encodable {
+            let model: String
+            let messages: [Message]
+            let stream: Bool = false
+            struct Message: Encodable { let role: String; let content: String }
+        }
+
+        let payload = OllamaReq(model: model, messages: [
+            OllamaReq.Message(role: "system", content: systemPrompt),
+            OllamaReq.Message(role: "user", content: userPrompt)
+        ])
+        do { request.httpBody = try JSONEncoder().encode(payload) }
+        catch { throw LLMClientError.networkFailed("编码请求失败: \(error.localizedDescription)") }
+        await Logger.shared.info("Ollama 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
+
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: request) }
+        catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LLMClientError.networkFailed("无 HTTP 响应")
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<empty>"
+            await Logger.shared.info("Ollama 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
+        }
+        await Logger.shared.info("Ollama 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        struct OllamaResp: Decodable {
+            let message: Msg
+            struct Msg: Decodable { let content: String }
+        }
+        do {
+            let result = try JSONDecoder().decode(OllamaResp.self, from: data).message.content
+            await Logger.shared.info("Ollama 测试成功: \(result.prefix(200))")
+            return result
+        } catch {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(500))")
+        }
     }
 }

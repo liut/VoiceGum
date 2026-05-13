@@ -16,11 +16,11 @@ public final class AppPreferences: @unchecked Sendable {
         static let volcAccessToken = "voicegum.volcAccessToken"
         static let llmEnabled = "voicegum.llmEnabled"
         static let llmProvider = "voicegum.llmProvider"
-        static let llmBaseURL = "voicegum.llmBaseURL"
-        static let llmModel = "voicegum.llmModel"
     }
 
     private init() {}
+
+    // MARK: - ASR
 
     public var language: String {
         get { defaults.string(forKey: Keys.language) ?? "zh-CN" }
@@ -62,6 +62,8 @@ public final class AppPreferences: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Keys.volcAccessToken) }
     }
 
+    // MARK: - LLM (global)
+
     public var llmEnabled: Bool {
         get { defaults.bool(forKey: Keys.llmEnabled) }
         set { defaults.set(newValue, forKey: Keys.llmEnabled) }
@@ -72,13 +74,63 @@ public final class AppPreferences: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Keys.llmProvider) }
     }
 
-    public var llmBaseURL: String {
-        get { defaults.string(forKey: Keys.llmBaseURL) ?? "https://api.openai.com/v1" }
-        set { defaults.set(newValue, forKey: Keys.llmBaseURL) }
+    // MARK: - LLM (per-provider)
+
+    public func llmBaseURL(for provider: String? = nil) -> String {
+        let p = provider ?? llmProvider
+        let key = "voicegum.llm.\(p).baseURL"
+        return defaults.string(forKey: key) ?? defaultBaseURL(for: p)
     }
 
-    public var llmModel: String {
-        get { defaults.string(forKey: Keys.llmModel) ?? "gpt-4o-mini" }
-        set { defaults.set(newValue, forKey: Keys.llmModel) }
+    public func setLLMBaseURL(_ value: String, for provider: String? = nil) {
+        let p = provider ?? llmProvider
+        defaults.set(value, forKey: "voicegum.llm.\(p).baseURL")
+    }
+
+    public func llmModel(for provider: String? = nil) -> String {
+        let p = provider ?? llmProvider
+        let key = "voicegum.llm.\(p).model"
+        return defaults.string(forKey: key) ?? defaultModel(for: p)
+    }
+
+    public func setLLMModel(_ value: String, for provider: String? = nil) {
+        let p = provider ?? llmProvider
+        defaults.set(value, forKey: "voicegum.llm.\(p).model")
+    }
+
+    public func llmPrompt(for provider: String? = nil) -> String {
+        let p = provider ?? llmProvider
+        return defaults.string(forKey: "voicegum.llm.\(p).prompt") ?? ""
+    }
+
+    public func setLLMPrompt(_ value: String, for provider: String? = nil) {
+        let p = provider ?? llmProvider
+        defaults.set(value, forKey: "voicegum.llm.\(p).prompt")
+    }
+
+    public func llmAPIKey(for provider: String? = nil) -> String {
+        let p = provider ?? llmProvider
+        return defaults.string(forKey: "voicegum.llm.\(p).apiKey") ?? ""
+    }
+
+    public func setLLMAPIKey(_ value: String, for provider: String? = nil) {
+        let p = provider ?? llmProvider
+        defaults.set(value, forKey: "voicegum.llm.\(p).apiKey")
+    }
+
+    private func defaultBaseURL(for provider: String) -> String {
+        switch provider {
+        case "anthropic": return "https://api.anthropic.com"
+        case "ollama": return "http://localhost:11434"
+        default: return "https://api.openai.com/v1"
+        }
+    }
+
+    private func defaultModel(for provider: String) -> String {
+        switch provider {
+        case "anthropic": return "claude-haiku-3-5"
+        case "ollama": return "llama3"
+        default: return "gpt-4o-mini"
+        }
     }
 }

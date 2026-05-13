@@ -316,14 +316,19 @@ extension ButtonStyle where Self == YellowButtonStyle {
 struct LLMSettingsTab: View {
     @State private var llmEnabled = AppPreferences.shared.llmEnabled
     @State private var llmProvider = AppPreferences.shared.llmProvider
-    @State private var llmBaseURL = AppPreferences.shared.llmBaseURL
-    @State private var llmModel = AppPreferences.shared.llmModel
+    @State private var llmBaseURL = AppPreferences.shared.llmBaseURL()
+    @State private var llmModel = AppPreferences.shared.llmModel()
+    @State private var llmPrompt = AppPreferences.shared.llmPrompt()
     @State private var apiKey = ""
     @State private var saveSuccess = false
     @State private var testSuccess = false
     @State private var testError = ""
 
-    let providers = [("openai", "OpenAI"), ("anthropic", "Anthropic"), ("azure", "Azure OpenAI"), ("custom", "自定义")]
+    let providers = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
+
+    private let defaultLLMPrompt = "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
+
+    private var currentProvider: String { llmProvider }
 
     var body: some View {
         Form {
@@ -334,57 +339,75 @@ struct LLMSettingsTab: View {
             Section(String(localized: "API 配置")) {
                 Picker(String(localized: "提供商"), selection: $llmProvider) {
                     ForEach(providers, id: \.0) { Text($0.1).tag($0.0) }
-                }.onChange(of: llmProvider) { AppPreferences.shared.llmProvider = llmProvider }
+                }.onChange(of: llmProvider) { _, newProvider in
+                    AppPreferences.shared.llmProvider = newProvider
+                    loadProviderConfig()
+                }
                 TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
-                    .onChange(of: llmBaseURL) { AppPreferences.shared.llmBaseURL = llmBaseURL }
+                    .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
                 TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
-                    .onChange(of: llmModel) { AppPreferences.shared.llmModel = llmModel }
+                    .onChange(of: llmModel) { AppPreferences.shared.setLLMModel(llmModel) }
                 SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
+                    .onChange(of: apiKey) { saveAPIKey() }
+            }
+            Section("System Prompt") {
+                TextEditor(text: $llmPrompt)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minHeight: 80)
+                    .onChange(of: llmPrompt) { AppPreferences.shared.setLLMPrompt(llmPrompt) }
+                Text("优化提示词，可自定义修改").font(.caption).foregroundColor(.secondary)
             }
             Section {
                 HStack {
                     Button(String(localized: "测试")) { testConnection() }.buttonStyle(.bordered)
-                    Button(String(localized: "保存")) { saveSettings() }.buttonStyle(.bordered)
                     Spacer()
-                    Button(String(localized: "清空 Key")) { apiKey = ""; saveSettings() }.buttonStyle(.bordered)
+                    Button(String(localized: "清空 Key")) { apiKey = ""; saveAPIKey() }.buttonStyle(.bordered)
                 }
-                if saveSuccess { Text(String(localized: "保存成功!")).foregroundColor(.green).font(.caption) }
                 if testSuccess { Text(String(localized: "连接成功!")).foregroundColor(.green).font(.caption) }
-                if !testError.isEmpty { Text(testError).foregroundColor(.red).font(.caption) }
+                if !testError.isEmpty { Text(testError).foregroundColor(.red).font(.caption).textSelection(.enabled) }
             }
         }
         .formStyle(.grouped)
-        .onAppear { llmEnabled = AppPreferences.shared.llmEnabled; llmProvider = AppPreferences.shared.llmProvider; llmBaseURL = AppPreferences.shared.llmBaseURL; llmModel = AppPreferences.shared.llmModel; loadAPIKey() }
-    }
-
-    private func loadAPIKey() {
-        Task { if let key = try? await KeychainManager.shared.readAPIKey() { apiKey = key } }
-    }
-    private func saveSettings() {
-        AppPreferences.shared.llmEnabled = llmEnabled; AppPreferences.shared.llmProvider = llmProvider
-        AppPreferences.shared.llmBaseURL = llmBaseURL; AppPreferences.shared.llmModel = llmModel
-        Task {
-            if apiKey.isEmpty { try? await KeychainManager.shared.deleteAPIKey() }
-            else { try? await KeychainManager.shared.saveAPIKey(apiKey) }
-            saveSuccess = true
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            saveSuccess = false
+        .onAppear {
+            llmEnabled = AppPreferences.shared.llmEnabled
+            llmProvider = AppPreferences.shared.llmProvider
+            loadProviderConfig()
         }
     }
+
+    private func loadProviderConfig() {
+        llmBaseURL = AppPreferences.shared.llmBaseURL()
+        llmModel = AppPreferences.shared.llmModel()
+        let savedPrompt = AppPreferences.shared.llmPrompt()
+        llmPrompt = savedPrompt.isEmpty ? defaultLLMPrompt : savedPrompt
+        apiKey = AppPreferences.shared.llmAPIKey()
+    }
+
+    private func saveAPIKey() {
+        AppPreferences.shared.setLLMAPIKey(apiKey)
+    }
+
     private func testConnection() {
         testError = ""; testSuccess = false
         guard !llmBaseURL.isEmpty else { testError = "请输入 Base URL"; return }
+        guard let baseURL = URL(string: llmBaseURL) else { testError = "无效的 URL: \(llmBaseURL)"; return }
         Task {
             do {
-                guard let baseURL = URL(string: llmBaseURL) else { testError = "无效的 URL"; return }
                 let provider: LLMProvider = switch llmProvider {
-                case "anthropic": .anthropic; case "azure": .azure
-                case "ollama": .ollama; default: .openai
+                case "anthropic": .anthropic
+                case "ollama": .ollama
+                default: .openai
                 }
                 await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: llmModel)
-                _ = try await LLMClient.shared.refine(text: "测试")
+                let result = try await LLMClient.shared.refine(text: "测试", customPrompt: llmPrompt.isEmpty ? nil : llmPrompt)
                 testSuccess = true
-            } catch { testError = "失败: \(error.localizedDescription)" }
+                testError = "成功: \(result.prefix(100))"
+            } catch let err as LLMClientError {
+                testError = "\(err.localizedDescription)"
+            } catch {
+                let nsErr = error as NSError
+                testError = "失败: \(error.localizedDescription)\nDomain: \(nsErr.domain) Code: \(nsErr.code)\nURL: \(llmBaseURL)\nProvider: \(llmProvider)\nModel: \(llmModel)"
+            }
         }
     }
 }

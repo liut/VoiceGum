@@ -138,7 +138,7 @@ final class TranscriptionViewModel: ObservableObject {
                 state = .transcribing(progress: 1.0, currentFile: files.count, totalFiles: files.count)
 
                 // Check if LLM refinement is needed
-                if AppPreferences.shared.llmEnabled && AppPreferences.shared.llmBaseURL.isEmpty == false {
+                if AppPreferences.shared.llmEnabled && !AppPreferences.shared.llmBaseURL().isEmpty {
                     // Trigger refinement after a short delay to show completion first
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
 
@@ -146,7 +146,8 @@ final class TranscriptionViewModel: ObservableObject {
 
                     var refinedResults: [TranscriptionResult] = []
                     for result in allResults {
-                        let refinedText = try await LLMClient.shared.refine(text: result.text)
+                        let prompt = AppPreferences.shared.llmPrompt()
+                    let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
                         refinedResults.append(TranscriptionResult(
                             text: refinedText,
                             timestamps: result.timestamps,

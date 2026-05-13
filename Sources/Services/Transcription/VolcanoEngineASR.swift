@@ -1,11 +1,5 @@
 import Foundation
 
-private func vclog(_ msg: String) {
-    let ts = DateFormatter()
-    ts.dateFormat = "HH:mm:ss.SSS"
-    print("[\(ts.string(from: Date()))] [VolcanoASR] \(msg)")
-}
-
 // MARK: - v3 Binary Protocol Constants
 
 private let MSG_CLIENT_FULL_REQUEST: UInt8 = 0b0001
@@ -71,12 +65,12 @@ public actor VolcanoEngineASR: TranscriptionService {
         let startedAt = Date()
         let requestId = UUID().uuidString
         let connectId = UUID().uuidString
-        vclog("开始转写 requestId=\(requestId) file=\(file.lastPathComponent)")
+        await Logger.shared.info("开始转写 requestId=\(requestId) file=\(file.lastPathComponent)")
 
         let wavFile = try await AudioConverter.convertTo16kHzWav(file)
         let pcmData = try readPCMData(from: wavFile)
         let audioDuration = Double(pcmData.count) / 32000.0
-        vclog("音频转换完成 时长=\(String(format: "%.1f", audioDuration))s PCM大小=\(pcmData.count) bytes")
+        await Logger.shared.info("音频转换完成 时长=\(String(format: "%.1f", audioDuration))s PCM大小=\(pcmData.count) bytes")
 
         var wsReq = URLRequest(url: URL(string: wsURL)!)
         wsReq.timeoutInterval = 30
@@ -99,10 +93,10 @@ public actor VolcanoEngineASR: TranscriptionService {
             }
         } catch {
             let detail = await fetchAuthError()
-            vclog("WebSocket 连接失败: \(error.localizedDescription) detail=\(detail)")
+            await Logger.shared.info("WebSocket 连接失败: \(error.localizedDescription) detail=\(detail)")
             throw TranscriptionError.transcriptionFailed("火山引擎连接失败\(detail)")
         }
-        vclog("WebSocket 已连接 connectId=\(connectId)")
+        await Logger.shared.info("WebSocket 已连接 connectId=\(connectId)")
 
         let langCode = languageCode(for: language)
         let totalChunks = (pcmData.count + 6399) / 6400
@@ -135,7 +129,7 @@ public actor VolcanoEngineASR: TranscriptionService {
                     throw TranscriptionError.transcriptionFailed("火山引擎: gzip 压缩失败")
                 }
                 try await wsTask.send(.data(frame))
-                vclog("已发送配置帧")
+                await Logger.shared.info("已发送配置帧")
 
                 // 2. Audio chunks (flags = NO_SEQUENCE or NEG_SEQUENCE for last)
                 let bytesPerChunk = 6400
@@ -160,7 +154,7 @@ public actor VolcanoEngineASR: TranscriptionService {
                         try await Task.sleep(nanoseconds: 100_000_000)
                     }
                 }
-                vclog("音频发送完成 chunks=\(sentChunks)/\(totalChunks)")
+                await Logger.shared.info("音频发送完成 chunks=\(sentChunks)/\(totalChunks)")
 
                 // 3. Receive results
                 var finalText = ""
@@ -169,7 +163,7 @@ public actor VolcanoEngineASR: TranscriptionService {
                     if Task.isCancelled { break }
                     let msg: URLSessionWebSocketTask.Message
                     do { msg = try await wsTask.receive() } catch {
-                        vclog("WebSocket 接收结束: \(error.localizedDescription)")
+                        await Logger.shared.info("WebSocket 接收结束: \(error.localizedDescription)")
                         break
                     }
 
@@ -179,7 +173,7 @@ public actor VolcanoEngineASR: TranscriptionService {
                     if parsed.type == MSG_SERVER_ERROR {
                         if let payload = parsed.payload,
                            let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] {
-                            vclog("服务端错误: \(String(describing: json))")
+                            await Logger.shared.info("服务端错误: \(String(describing: json))")
                         }
                         throw TranscriptionError.transcriptionFailed("火山引擎服务端错误")
                     }
@@ -193,19 +187,19 @@ public actor VolcanoEngineASR: TranscriptionService {
                         finalText = text
                     }
                     if parsed.isLast {
-                        vclog("收到最终结果 chunks=\(receivedCount) textLen=\(finalText.count)")
+                        await Logger.shared.info("收到最终结果 chunks=\(receivedCount) textLen=\(finalText.count)")
                         break
                     }
                 }
 
                 let elapsed = Date().timeIntervalSince(startedAt)
-                vclog("转写完成 耗时=\(String(format: "%.1f", elapsed))s requestId=\(requestId)")
+                await Logger.shared.info("转写完成 耗时=\(String(format: "%.1f", elapsed))s requestId=\(requestId)")
                 return finalText
             }
 
             group.addTask {
                 try await Task.sleep(nanoseconds: 300_000_000_000) // 5 min timeout for long audio
-                vclog("转写超时 requestId=\(requestId)")
+                await Logger.shared.info("转写超时 requestId=\(requestId)")
                 wsTask.cancel(with: .normalClosure, reason: nil)
                 throw TranscriptionError.transcriptionFailed("火山引擎: 转写超时")
             }
@@ -218,7 +212,7 @@ public actor VolcanoEngineASR: TranscriptionService {
         guard !resultText.isEmpty else {
             throw TranscriptionError.transcriptionFailed("火山引擎: 未收到识别结果")
         }
-        vclog("转写成功 requestId=\(requestId) textLen=\(resultText.count)")
+        await Logger.shared.info("转写成功 requestId=\(requestId) textLen=\(resultText.count)")
         return TranscriptionResult(text: resultText, timestamps: nil, language: language, confidence: nil)
     }
 
@@ -241,13 +235,13 @@ public actor VolcanoEngineASR: TranscriptionService {
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            vclog("鉴权探测 HTTP \(statusCode)")
+            await Logger.shared.info("鉴权探测 HTTP \(statusCode)")
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let error = json["error"] as? String {
                 return ": \(error)"
             }
         } catch {
-            vclog("鉴权探测失败: \(error.localizedDescription)")
+            await Logger.shared.info("鉴权探测失败: \(error.localizedDescription)")
         }
         return "，请检查 APP ID / Access Token / Resource ID"
     }

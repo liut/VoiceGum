@@ -90,21 +90,21 @@ public actor KeychainManager {
         }
     }
 
-    public func saveAPIKey(_ apiKey: String) throws {
+    public func saveAPIKey(_ apiKey: String, provider: String = "openai") throws {
         guard let data = apiKey.data(using: .utf8) else { return }
-        try save(key: "apiKey", data: data)
+        try save(key: "llmApiKey.\(provider)", data: data)
     }
 
-    public func readAPIKey() throws -> String {
-        let data = try read(key: "apiKey")
+    public func readAPIKey(provider: String = "openai") throws -> String {
+        let data = try read(key: "llmApiKey.\(provider)")
         guard let apiKey = String(data: data, encoding: .utf8) else {
             throw KeychainError.itemNotFound
         }
         return apiKey
     }
 
-    public func deleteAPIKey() throws {
-        try delete(key: "apiKey")
+    public func deleteAPIKey(provider: String = "openai") throws {
+        try delete(key: "llmApiKey.\(provider)")
     }
 
     public func saveASRAPIKey(_ apiKey: String) throws {
