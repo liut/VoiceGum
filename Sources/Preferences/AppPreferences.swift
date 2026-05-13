@@ -10,6 +10,10 @@ public final class AppPreferences: @unchecked Sendable {
         static let asrProvider = "voicegum.asrProvider"
         static let asrModel = "voicegum.asrModel"
         static let asrAPIURL = "voicegum.asrAPIURL"
+        static let onlineASRService = "voicegum.onlineASRService"
+        static let volcAppId = "voicegum.volcAppId"
+        static let volcResourceId = "voicegum.volcResourceId"
+        static let volcAccessToken = "voicegum.volcAccessToken"
         static let llmEnabled = "voicegum.llmEnabled"
         static let llmProvider = "voicegum.llmProvider"
         static let llmBaseURL = "voicegum.llmBaseURL"
@@ -36,6 +40,26 @@ public final class AppPreferences: @unchecked Sendable {
     public var asrAPIURL: String {
         get { defaults.string(forKey: Keys.asrAPIURL) ?? "https://api.openai.com/v1" }
         set { defaults.set(newValue, forKey: Keys.asrAPIURL) }
+    }
+
+    public var onlineASRService: String {
+        get { defaults.string(forKey: Keys.onlineASRService) ?? "openai" }
+        set { defaults.set(newValue, forKey: Keys.onlineASRService) }
+    }
+
+    public var volcAppId: String {
+        get { defaults.string(forKey: Keys.volcAppId) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.volcAppId) }
+    }
+
+    public var volcResourceId: String {
+        get { defaults.string(forKey: Keys.volcResourceId) ?? "volc.seedasr.sauc.duration" }
+        set { defaults.set(newValue, forKey: Keys.volcResourceId) }
+    }
+
+    public var volcAccessToken: String {
+        get { defaults.string(forKey: Keys.volcAccessToken) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.volcAccessToken) }
     }
 
     public var llmEnabled: Bool {

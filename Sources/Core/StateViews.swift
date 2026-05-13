@@ -88,7 +88,7 @@ struct TranscriptionProgressView: View {
                     .progressViewStyle(.linear)
                     .frame(width: 200)
 
-                Text(statusMessage.isEmpty ? "Transcribing..." : statusMessage)
+                Text(statusMessage.isEmpty ? "转写中..." : statusMessage)
                     .font(.caption)
                     .foregroundColor(.secondary)
 

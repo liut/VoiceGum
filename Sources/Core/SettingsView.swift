@@ -34,9 +34,14 @@ struct ASRSettingsTab: View {
     @State private var selectedModel = AppPreferences.shared.asrModel
     @State private var apiURL = AppPreferences.shared.asrAPIURL
     @State private var apiKey = ""
+    @State private var onlineService = AppPreferences.shared.onlineASRService
+    @State private var volcAppId = AppPreferences.shared.volcAppId
+    @State private var volcAccessToken = AppPreferences.shared.volcAccessToken
+    @State private var volcResourceId = AppPreferences.shared.volcResourceId
     @State private var expandedFamilies: Set<String> = []
 
     let onlineModels = [("whisper-1", "Whisper v1"), ("whisper-large", "Whisper Large v3")]
+    let onlineServices = [("openai", "OpenAI"), ("volcengine", "火山引擎")]
 
     let modelFamilies: [ModelFamily] = [
         ModelFamily(id: "sensevoice", name: "SenseVoice", icon: "ear.and.waveform",
@@ -82,19 +87,48 @@ struct ASRSettingsTab: View {
                 }
 
                 if providerType == "online" {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("API 配置").font(.headline)
-                        TextField("API URL", text: $apiURL)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: apiURL) { AppPreferences.shared.asrAPIURL = apiURL }
-                        SecureField("API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: apiKey) {
-                                Task {
-                                    if apiKey.isEmpty { try? await KeychainManager.shared.deleteASRAPIKey() }
-                                    else { try? await KeychainManager.shared.saveASRAPIKey(apiKey) }
-                                }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("在线服务商").font(.headline)
+
+                        Picker("服务商", selection: $onlineService) {
+                            ForEach(onlineServices, id: \.0) { Text($0.1).tag($0.0) }
+                        }
+                        .pickerStyle(.segmented).labelsHidden()
+                        .onChange(of: onlineService) {
+                            AppPreferences.shared.onlineASRService = onlineService
+                        }
+
+                        if onlineService == "openai" {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("OpenAI 配置").font(.subheadline).foregroundColor(.secondary)
+                                TextField("API URL", text: $apiURL)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: apiURL) { AppPreferences.shared.asrAPIURL = apiURL }
+                                SecureField("API Key", text: $apiKey)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: apiKey) {
+                                        Task {
+                                            if apiKey.isEmpty { try? await KeychainManager.shared.deleteASRAPIKey() }
+                                            else { try? await KeychainManager.shared.saveASRAPIKey(apiKey) }
+                                        }
+                                    }
                             }
+                        }
+
+                        if onlineService == "volcengine" {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("火山引擎配置").font(.subheadline).foregroundColor(.secondary)
+                                TextField("APP ID", text: $volcAppId)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: volcAppId) { AppPreferences.shared.volcAppId = volcAppId }
+                                SecureField("Access Token", text: $volcAccessToken)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: volcAccessToken) { AppPreferences.shared.volcAccessToken = volcAccessToken }
+                                TextField("Resource ID (流式识别: volc.seedasr.sauc.duration)", text: $volcResourceId)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: volcResourceId) { AppPreferences.shared.volcResourceId = volcResourceId }
+                            }
+                        }
                     }
                     .padding()
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
@@ -126,6 +160,10 @@ struct ASRSettingsTab: View {
             providerType = AppPreferences.shared.asrProvider == "online" ? "online" : "local"
             selectedModel = AppPreferences.shared.asrModel
             apiURL = AppPreferences.shared.asrAPIURL
+            onlineService = AppPreferences.shared.onlineASRService
+            volcAppId = AppPreferences.shared.volcAppId
+            volcResourceId = AppPreferences.shared.volcResourceId
+            volcAccessToken = AppPreferences.shared.volcAccessToken
             loadAPIKey()
             Task { await ds.refreshDownloaded() }
             if let family = modelFamilies.first(where: { f in f.models.contains(where: { $0.id == selectedModel }) }) {

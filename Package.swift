@@ -28,8 +28,20 @@ let package = Package(
         ),
         .target(
             name: "VoiceGumServices",
-            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CQwenASR"],
+            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CQwenASR", "CZlib"],
             path: "Sources/Services"
+        ),
+        .target(
+            name: "CZlib",
+            path: "Sources/CZlib",
+            sources: ["gzip_helper.c"],
+            publicHeadersPath: "include",
+            cSettings: [
+                .unsafeFlags(["-fno-modules"]),
+            ],
+            linkerSettings: [
+                .linkedLibrary("z"),
+            ]
         ),
         .target(
             name: "VoiceGumPreferences",

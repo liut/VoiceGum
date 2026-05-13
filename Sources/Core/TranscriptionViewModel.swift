@@ -36,9 +36,18 @@ final class TranscriptionViewModel: ObservableObject {
         let provider = AppPreferences.shared.asrProvider
         switch provider {
         case "online":
-            let baseURL = URL(string: AppPreferences.shared.asrAPIURL) ?? URL(string: "https://api.openai.com/v1")!
-            let apiKey = (try? await KeychainManager.shared.readASRAPIKey()).flatMap { $0.isEmpty ? nil : $0 }
-            transcriptionService = OnlineAPITranscription(baseURL: baseURL, apiKey: apiKey, model: AppPreferences.shared.asrModel)
+            let service = AppPreferences.shared.onlineASRService
+            switch service {
+            case "volcengine":
+                let appId = AppPreferences.shared.volcAppId
+                let token = AppPreferences.shared.volcAccessToken
+                let resourceId = AppPreferences.shared.volcResourceId
+                transcriptionService = VolcanoEngineASR(appId: appId, accessToken: token, resourceId: resourceId)
+            default:
+                let baseURL = URL(string: AppPreferences.shared.asrAPIURL) ?? URL(string: "https://api.openai.com/v1")!
+                let apiKey = (try? await KeychainManager.shared.readASRAPIKey()).flatMap { $0.isEmpty ? nil : $0 }
+                transcriptionService = OnlineAPITranscription(baseURL: baseURL, apiKey: apiKey, model: AppPreferences.shared.asrModel)
+            }
         default:
             setupLocalService()
         }
