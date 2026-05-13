@@ -318,17 +318,13 @@ struct LLMSettingsTab: View {
     @State private var llmProvider = AppPreferences.shared.llmProvider
     @State private var llmBaseURL = AppPreferences.shared.llmBaseURL()
     @State private var llmModel = AppPreferences.shared.llmModel()
-    @State private var llmPrompt = AppPreferences.shared.llmPrompt()
+    @State private var refinePrompt = AppPreferences.shared.refinePrompt
+    @State private var summaryPrompt = AppPreferences.shared.summaryPrompt
     @State private var apiKey = ""
-    @State private var saveSuccess = false
     @State private var testSuccess = false
     @State private var testError = ""
 
     let providers = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
-
-    private let defaultLLMPrompt = "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
-
-    private var currentProvider: String { llmProvider }
 
     var body: some View {
         Form {
@@ -350,12 +346,21 @@ struct LLMSettingsTab: View {
                 SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
                     .onChange(of: apiKey) { saveAPIKey() }
             }
-            Section("System Prompt") {
-                TextEditor(text: $llmPrompt)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: 80)
-                    .onChange(of: llmPrompt) { AppPreferences.shared.setLLMPrompt(llmPrompt) }
-                Text("优化提示词，可自定义修改").font(.caption).foregroundColor(.secondary)
+            Section(String(localized: "任务提示词")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "Refine — 润色转写文字")).font(.caption).foregroundColor(.secondary)
+                    TextEditor(text: $refinePrompt)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 60)
+                        .onChange(of: refinePrompt) { AppPreferences.shared.refinePrompt = refinePrompt }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "Summary — 生成全文摘要")).font(.caption).foregroundColor(.secondary)
+                    TextEditor(text: $summaryPrompt)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 60)
+                        .onChange(of: summaryPrompt) { AppPreferences.shared.summaryPrompt = summaryPrompt }
+                }
             }
             Section {
                 HStack {
@@ -371,6 +376,8 @@ struct LLMSettingsTab: View {
         .onAppear {
             llmEnabled = AppPreferences.shared.llmEnabled
             llmProvider = AppPreferences.shared.llmProvider
+            refinePrompt = AppPreferences.shared.refinePrompt
+            summaryPrompt = AppPreferences.shared.summaryPrompt
             loadProviderConfig()
         }
     }
@@ -378,8 +385,6 @@ struct LLMSettingsTab: View {
     private func loadProviderConfig() {
         llmBaseURL = AppPreferences.shared.llmBaseURL()
         llmModel = AppPreferences.shared.llmModel()
-        let savedPrompt = AppPreferences.shared.llmPrompt()
-        llmPrompt = savedPrompt.isEmpty ? defaultLLMPrompt : savedPrompt
         apiKey = AppPreferences.shared.llmAPIKey()
     }
 
@@ -399,7 +404,7 @@ struct LLMSettingsTab: View {
                 default: .openai
                 }
                 await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: llmModel)
-                let result = try await LLMClient.shared.refine(text: "测试", customPrompt: llmPrompt.isEmpty ? nil : llmPrompt)
+                let result = try await LLMClient.shared.refine(text: "测试", customPrompt: refinePrompt.isEmpty ? nil : refinePrompt)
                 testSuccess = true
                 testError = "成功: \(result.prefix(100))"
             } catch let err as LLMClientError {

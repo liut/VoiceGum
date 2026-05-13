@@ -146,7 +146,7 @@ final class TranscriptionViewModel: ObservableObject {
 
                     var refinedResults: [TranscriptionResult] = []
                     for result in allResults {
-                        let prompt = AppPreferences.shared.llmPrompt()
+                        let prompt = AppPreferences.shared.refinePrompt
                     let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
                         refinedResults.append(TranscriptionResult(
                             text: refinedText,

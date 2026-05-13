@@ -98,14 +98,24 @@ public final class AppPreferences: @unchecked Sendable {
         defaults.set(value, forKey: "voicegum.llm.\(p).model")
     }
 
-    public func llmPrompt(for provider: String? = nil) -> String {
-        let p = provider ?? llmProvider
-        return defaults.string(forKey: "voicegum.llm.\(p).prompt") ?? ""
+    // MARK: - LLM Task Prompts (provider-agnostic)
+
+    public var refinePrompt: String {
+        get { defaults.string(forKey: "voicegum.llm.refinePrompt") ?? defaultRefinePrompt }
+        set { defaults.set(newValue, forKey: "voicegum.llm.refinePrompt") }
     }
 
-    public func setLLMPrompt(_ value: String, for provider: String? = nil) {
-        let p = provider ?? llmProvider
-        defaults.set(value, forKey: "voicegum.llm.\(p).prompt")
+    public var summaryPrompt: String {
+        get { defaults.string(forKey: "voicegum.llm.summaryPrompt") ?? defaultSummaryPrompt }
+        set { defaults.set(newValue, forKey: "voicegum.llm.summaryPrompt") }
+    }
+
+    private var defaultRefinePrompt: String {
+        "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
+    }
+
+    private var defaultSummaryPrompt: String {
+        "You are a text summarization assistant. Create a concise summary of the following transcribed text. Capture the key points and main ideas while keeping the summary brief and well-structured."
     }
 
     public func llmAPIKey(for provider: String? = nil) -> String {

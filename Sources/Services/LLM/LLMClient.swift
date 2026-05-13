@@ -92,21 +92,35 @@ public actor LLMClient {
             throw LLMClientError.notConfigured
         }
 
-        let defaultPrompt = "You are a text refinement assistant. Improve the following transcribed speech for readability while preserving the meaning. Fix any transcription errors, add proper punctuation, and format appropriately."
-        let systemPrompt = (customPrompt?.isEmpty == false) ? customPrompt! : defaultPrompt
+        let systemPrompt = (customPrompt?.isEmpty == false) ? customPrompt! : "You are a text refinement assistant."
         let userPrompt = "Please refine this text:\n\n\(text)"
 
+        return try await send(systemPrompt: systemPrompt, userPrompt: userPrompt, baseURL: baseURL)
+    }
+
+    public func summarize(text: String, customPrompt: String? = nil) async throws -> String {
+        guard let baseURL = baseURL else {
+            throw LLMClientError.notConfigured
+        }
+
+        let systemPrompt = (customPrompt?.isEmpty == false) ? customPrompt! : "You are a text summarization assistant."
+        let userPrompt = "Please summarize the following text:\n\n\(text)"
+
+        return try await send(systemPrompt: systemPrompt, userPrompt: userPrompt, baseURL: baseURL)
+    }
+
+    private func send(systemPrompt: String, userPrompt: String, baseURL: URL) async throws -> String {
         switch provider {
         case .ollama:
-            return try await ollamaRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+            return try await ollamaChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
         case .anthropic:
-            return try await anthropicRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+            return try await anthropicChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
         default:
-            return try await openaiRefine(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+            return try await openaiChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
         }
     }
 
-    private func openaiRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+    private func openaiChat(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
         let url = buildURL(base: baseURL, path: "chat/completions")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -158,7 +172,7 @@ public actor LLMClient {
         }
     }
 
-    private func anthropicRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+    private func anthropicChat(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
         let url = buildURL(base: baseURL, path: "v1/messages")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -214,7 +228,7 @@ public actor LLMClient {
         }
     }
 
-    private func ollamaRefine(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
+    private func ollamaChat(baseURL: URL, model: String, systemPrompt: String, userPrompt: String) async throws -> String {
         let url = buildURL(base: baseURL, path: "api/chat")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
