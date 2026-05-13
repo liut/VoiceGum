@@ -61,43 +61,18 @@ struct PreparingView: View {
 }
 
 struct TranscriptionProgressView: View {
-    let progress: Double
-    let currentFile: Int
-    let totalFiles: Int
     let statusMessage: String
     let onCancel: () -> Void
 
-    var isIndeterminate: Bool { progress < 0 }
-
     var body: some View {
         VStack(spacing: 16) {
-            if isIndeterminate {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .scaleEffect(1.2)
+            ProgressView()
+                .progressViewStyle(.circular)
+                .scaleEffect(1.2)
 
-                Text(String(localized: "SenseVoice 正在转写..."))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text(String(localized: "本地推理中，请耐心等待"))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            } else {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .frame(width: 200)
-
-                Text(statusMessage.isEmpty ? String(localized: "转写中...") : statusMessage)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                if totalFiles > 1 {
-                    Text("File \(currentFile) of \(totalFiles)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
+            Text(statusMessage.isEmpty ? String(localized: "转写中...") : statusMessage)
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Button(String(localized: "取消"), action: onCancel)
                 .buttonStyle(.bordered)

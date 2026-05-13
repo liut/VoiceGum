@@ -54,11 +54,8 @@ public struct MainView: View {
                 case .preparing(let asrName):
                     PreparingView(asrName: asrName)
 
-                case .transcribing(let progress, let current, let total):
+                case .transcribing:
                     TranscriptionProgressView(
-                        progress: progress,
-                        currentFile: current,
-                        totalFiles: total,
                         statusMessage: viewModel.statusMessage,
                         onCancel: { viewModel.cancelTranscription() }
                     )
@@ -85,6 +82,5 @@ public struct MainView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 480, height: 420)
     }
 }
