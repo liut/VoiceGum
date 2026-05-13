@@ -40,7 +40,7 @@ public struct HistoryView: View {
                 }
             }
         }
-        .frame(minWidth: 440, idealWidth: 480, minHeight: 460, idealHeight: 500)
+        .frame(minWidth: 480, idealWidth: 520, minHeight: 480, idealHeight: 520)
         .task { await loadEntries() }
     }
 
@@ -182,7 +182,7 @@ private struct HistoryDetailView: View {
                 .padding(16)
             }
         }
-        .frame(minWidth: 440, idealWidth: 480, minHeight: 460, idealHeight: 500)
+        .frame(minWidth: 480, idealWidth: 520, minHeight: 480, idealHeight: 520)
     }
 
     private func sectionBlock(title: String, color: Color, text: String) -> some View {
@@ -201,7 +201,7 @@ private struct HistoryDetailView: View {
                 .controlSize(.small)
             }
             Text(text)
-                .font(.system(size: 15))
+                .font(.system(size: 16))
                 .textSelection(.enabled)
         }
         .padding(12)

@@ -212,7 +212,7 @@ struct CancelledView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            Button(String(localized: "Start Over"), action: onReset)
+            Button(String(localized: "重新开始"), action: onReset)
                 .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

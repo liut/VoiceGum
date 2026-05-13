@@ -273,6 +273,14 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集中..." } }
       }
     },
+    "重新开始" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新开始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重新開始" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Over" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "やり直す" } }
+      }
+    },
     "松开以添加" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "松开以添加" } },
