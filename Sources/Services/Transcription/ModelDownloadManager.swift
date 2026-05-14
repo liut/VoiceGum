@@ -76,14 +76,6 @@ public actor ModelDownloadManager {
     public nonisolated func isModelDownloaded(_ modelId: String) -> Bool {
         let modelPath = Self.modelsURL.appendingPathComponent(modelId)
         guard FileManager.default.fileExists(atPath: modelPath.path) else { return false }
-        // Qwen3-ASR GGUF: requires decoder.gguf + mmproj.gguf
-        if modelId.hasPrefix("qwen3") {
-            guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) else { return false }
-            let hasDecoder = contents.contains(where: { $0.hasSuffix(".gguf") && !$0.contains("mmproj") })
-            let hasMmproj  = contents.contains(where: { $0.hasSuffix(".gguf") && $0.contains("mmproj") })
-            return hasDecoder && hasMmproj
-        }
-        // GGUF: check for non-part files
         if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) {
             return contents.contains(where: { !$0.hasSuffix(".part") && !$0.hasPrefix(".") })
         }
@@ -299,21 +291,6 @@ public let allModels: [ModelInfo] = [
         hfRepo: "lovemefan/sense-voice-gguf",
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp32.gguf"]
-    ),
-    // Qwen3-ASR GGUF models (decoder + mmproj)
-    ModelInfo(
-        id: "qwen3-asr-0.6b-q8", displayName: "Qwen3-ASR 0.6B Q8_0",
-        fileSize: 805_000_000 + 215_000_000, sizeLabel: "~1.0 GB",
-        hfRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
-        msRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
-        hfFiles: ["Qwen3-ASR-0.6B-Q8_0.gguf", "mmproj-Qwen3-ASR-0.6B-Q8_0.gguf"]
-    ),
-    ModelInfo(
-        id: "qwen3-asr-0.6b-bf16", displayName: "Qwen3-ASR 0.6B BF16 (完整精度)",
-        fileSize: 1_510_000_000 + 379_000_000, sizeLabel: "~1.9 GB",
-        hfRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
-        msRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
-        hfFiles: ["Qwen3-ASR-0.6B-bf16.gguf", "mmproj-Qwen3-ASR-0.6B-bf16.gguf"]
     ),
 ]
 

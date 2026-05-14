@@ -34,7 +34,7 @@ public struct HistoryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(entries.reversed()) { entry in
-                    HistoryRow(entry: entry)
+                    HistoryRow(entry: entry, onDelete: { deleteEntry(entry) })
                         .contentShape(Rectangle())
                         .onTapGesture { selectedEntry = entry }
                 }
@@ -47,10 +47,18 @@ public struct HistoryView: View {
     private func loadEntries() async {
         entries = await HistoryManager.shared.entries
     }
+
+    private func deleteEntry(_ entry: HistoryEntry) {
+        Task {
+            await HistoryManager.shared.delete(id: entry.id)
+            await loadEntries()
+        }
+    }
 }
 
 private struct HistoryRow: View {
     let entry: HistoryEntry
+    let onDelete: () -> Void
 
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -67,29 +75,38 @@ private struct HistoryRow: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.displayTitle)
-                .font(.system(size: 14))
-                .fontWeight(.medium)
-                .lineLimit(1)
-            HStack(spacing: 12) {
-                Text(dateFormatter.string(from: entry.timestamp))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(entry.engineDescription)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                if let d = entry.duration, let formatted = durationFormatter.string(from: d) {
-                    Text(formatted)
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.displayTitle)
+                    .font(.system(size: 14))
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                HStack(spacing: 12) {
+                    Text(dateFormatter.string(from: entry.timestamp))
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-                if entry.summaryText != nil {
-                    Image(systemName: "text.quote")
-                        .font(.caption2)
-                        .foregroundColor(.accentColor)
+                    Text(entry.engineDescription)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if let d = entry.duration, let formatted = durationFormatter.string(from: d) {
+                        Text(formatted)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if entry.summaryText != nil {
+                        Image(systemName: "text.quote")
+                            .font(.caption2)
+                            .foregroundColor(.accentColor)
+                    }
                 }
             }
+            Spacer()
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
     }

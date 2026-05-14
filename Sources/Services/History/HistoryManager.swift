@@ -44,6 +44,11 @@ public actor HistoryManager {
         persist()
     }
 
+    public func delete(id: String) {
+        entries.removeAll { $0.id == id }
+        persist()
+    }
+
     private func persist() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: fileURL, options: .atomic)

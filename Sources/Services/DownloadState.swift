@@ -22,8 +22,7 @@ public final class DownloadState: ObservableObject {
         for model in allModels {
             if await ModelDownloadManager.shared.isModelDownloaded(model.id) {
                 downloaded.insert(model.id)
-            } else if !model.id.hasPrefix("qwen3"),
-                      let info = await ModelDownloadManager.shared.partialDownloadInfo(model.id, expectedSize: model.fileSize) {
+            } else if let info = await ModelDownloadManager.shared.partialDownloadInfo(model.id, expectedSize: model.fileSize) {
                 partial[model.id] = info.progress
             }
         }

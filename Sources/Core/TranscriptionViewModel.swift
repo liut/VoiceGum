@@ -32,9 +32,15 @@ final class TranscriptionViewModel: ObservableObject {
 
     private func setupLocalService() {
         guard AppPreferences.shared.asrProvider != "online" else { return }
-        guard isModelDownloaded(AppPreferences.shared.asrModel) else { return }
-        let modelId = AppPreferences.shared.asrModel
-        let svc = GGMLTranscriptionService(modelId: modelId)
+        let savedId = AppPreferences.shared.asrModel
+        // Validate the saved model is still in the catalog — prevents crash
+        // when a removed model (e.g. Qwen3-ASR) lingers in UserDefaults
+        guard let model = model(for: savedId) else {
+            AppPreferences.shared.asrModel = "sense-voice-fp16"
+            return
+        }
+        guard isModelDownloaded(model.id) else { return }
+        let svc = GGMLTranscriptionService(modelId: model.id)
         try? svc.loadModel()
         transcriptionService = svc
     }
@@ -76,8 +82,7 @@ final class TranscriptionViewModel: ObservableObject {
             }
         case "local":
             let modelId = AppPreferences.shared.asrModel
-            if modelId.hasPrefix("qwen3") { return "Qwen3-ASR (\(modelId))" }
-            else if modelId.hasPrefix("sense-voice") { return "SenseVoice (\(modelId))" }
+            if modelId.hasPrefix("sense-voice") { return "SenseVoice (\(modelId))" }
             else { return serviceName }
         default:
             return serviceName

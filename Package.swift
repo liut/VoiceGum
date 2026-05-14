@@ -53,7 +53,7 @@ let package = Package(
             linkerSettings: [
                 .unsafeFlags([
                     "-L", "Sources/CAsrEngine/libs",
-                    "-lllama", "-lmtmd", "-lggml", "-lggml-base", "-lggml-cpu", "-lggml-metal",
+                    "-lggml", "-lggml-base", "-lggml-cpu", "-lggml-metal",
                     "-lc++",
                 ]),
                 .linkedFramework("Metal"),
