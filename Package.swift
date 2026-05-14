@@ -48,7 +48,8 @@ let package = Package(
             publicHeadersPath: "include",
             cxxSettings: [
                 .unsafeFlags(["-fno-modules", "-std=c++17",
-                              "-I", "Sources/CAsrEngine/private_headers"]),
+                              "-I", "Sources/CAsrEngine/private_headers",
+                              "-Wno-unused-command-line-argument"]),
             ],
             linkerSettings: [
                 .unsafeFlags([

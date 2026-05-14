@@ -20,7 +20,7 @@ public final class DownloadState: ObservableObject {
         var downloaded: Set<String> = []
         var partial: [String: Double] = [:]
         for model in allModels {
-            if await ModelDownloadManager.shared.isModelDownloaded(model.id) {
+            if ModelDownloadManager.shared.isModelDownloaded(model.id) {
                 downloaded.insert(model.id)
             } else if let info = await ModelDownloadManager.shared.partialDownloadInfo(model.id, expectedSize: model.fileSize) {
                 partial[model.id] = info.progress
