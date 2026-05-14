@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import CAsrEngine
 import VoiceGumCore
 import VoiceGumServices
 
@@ -16,11 +17,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        asr_engine_init()
         Task { _ = await Logger.shared.getLogPath() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        GGMLTranscriptionService.invalidateActiveModel()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+        // MARK: - File Open
+
+    @objc func openFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio, .mpeg4Audio, .mp3, .wav, .aiff, .mpeg4Movie, .quickTimeMovie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            NotificationCenter.default.post(name: .voiceGumOpenFile, object: url)
+        }
+    }
+
+    func application(_ sender: NSApplication, openFiles files: [String]) {
+        guard let file = files.first else { return }
+        NotificationCenter.default.post(name: .voiceGumOpenFile, object: URL(fileURLWithPath: file))
     }
 
     // MARK: - Settings Window

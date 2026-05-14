@@ -44,9 +44,11 @@ public struct MainView: View {
                 case .preparing(let asrName):
                     PreparingView(asrName: asrName)
 
-                case .transcribing:
+                case .transcribing(let progress, let currentFile, let totalFiles):
                     TranscriptionProgressView(
-                        statusMessage: viewModel.statusMessage,
+                        progress: progress,
+                        currentFile: currentFile,
+                        totalFiles: totalFiles,
                         onCancel: { viewModel.cancelTranscription() }
                     )
 

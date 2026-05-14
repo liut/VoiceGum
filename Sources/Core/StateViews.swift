@@ -61,21 +61,40 @@ struct PreparingView: View {
 }
 
 struct TranscriptionProgressView: View {
-    let statusMessage: String
+    let progress: Double
+    let currentFile: Int
+    let totalFiles: Int
     let onCancel: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
             ProgressView()
                 .progressViewStyle(.circular)
-                .scaleEffect(1.2)
+                .scaleEffect(1.0)
 
-            Text(statusMessage.isEmpty ? String(localized: "转写中...") : statusMessage)
+            VStack(spacing: 8) {
+                ProgressView(value: max(progress, 0), total: 1.0)
+                    .progressViewStyle(.linear)
+                    .frame(width: 200)
+                Text("\(Int(max(progress, 0) * 100))%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+
+            Text(String(localized: "转写中..."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
+            if totalFiles > 1 {
+                Text("文件 \(currentFile) / \(totalFiles)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Button(String(localized: "取消"), action: onCancel)
                 .buttonStyle(.bordered)
+                .keyboardShortcut(.escape, modifiers: [])
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

@@ -49,8 +49,8 @@ struct ASRSettingsTab: View {
             tags: ["本地", "GPU", "GGUF"],
             models: allModels.filter { $0.id.hasPrefix("sense-voice") }),
         ModelFamily(id: "qwen3asr", name: "Qwen3-ASR", icon: "brain.head.profile",
-            description: "通义千问语音识别 · 16头注意力 · 752M参数 · 更高精度",
-            tags: ["本地", "CPU", "Safetensors"],
+            description: "通义千问语音识别 · 600M参数 · 多语言 · Metal加速",
+            tags: ["本地", "GPU", "GGUF"],
             models: allModels.filter { $0.id.hasPrefix("qwen3") }),
     ]
 

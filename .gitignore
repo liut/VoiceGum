@@ -177,3 +177,4 @@ fbank_lfr_cmvn_feature.json
 todos/
 *.local.*
 *.iconset/
+tests/

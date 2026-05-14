@@ -18,7 +18,6 @@ let package = Package(
             dependencies: ["VoiceGumCore", "VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey"],
             path: "Sources/App",
             resources: [
-                .copy("../../Frameworks/sense-voice"),
                 .process("Resources"),
             ]
         ),
@@ -29,8 +28,38 @@ let package = Package(
         ),
         .target(
             name: "VoiceGumServices",
-            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CQwenASR", "CZlib"],
+            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CZlib", "CAsrEngine"],
             path: "Sources/Services"
+        ),
+        .target(
+            name: "CAsrEngine",
+            path: "Sources/CAsrEngine",
+            sources: [
+                "asr_engine.cpp",
+                "common.cc",
+                "sense_voice_adapter.cpp",
+                "sense-voice.cc",
+                "sense-voice-encoder.cc",
+                "sense-voice-decoder.cc",
+                "sense-voice-frontend.cc",
+                "silero-vad.cc",
+                "fftsg.cc",
+            ],
+            publicHeadersPath: "include",
+            cxxSettings: [
+                .unsafeFlags(["-fno-modules", "-std=c++17",
+                              "-I", "Sources/CAsrEngine/private_headers"]),
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-L", "Sources/CAsrEngine/libs",
+                    "-lllama", "-lmtmd", "-lggml", "-lggml-base", "-lggml-cpu", "-lggml-metal",
+                    "-lc++",
+                ]),
+                .linkedFramework("Metal"),
+                .linkedFramework("Foundation"),
+                .linkedFramework("Accelerate"),
+            ]
         ),
         .target(
             name: "CZlib",
@@ -58,28 +87,6 @@ let package = Package(
             name: "VoiceGumFnKey",
             dependencies: [],
             path: "Sources/FnKey"
-        ),
-        .target(
-            name: "CQwenASR",
-            path: "Sources/CQwenASR",
-            sources: [
-                "qwen_asr.c",
-                "qwen_asr_audio.c",
-                "qwen_asr_decoder.c",
-                "qwen_asr_encoder.c",
-                "qwen_asr_kernels.c",
-                "qwen_asr_kernels_generic.c",
-                "qwen_asr_kernels_neon.c",
-                "qwen_asr_safetensors.c",
-                "qwen_asr_tokenizer.c",
-            ],
-            cSettings: [
-                .unsafeFlags(["-fno-modules"]),
-                .define("USE_BLAS"),
-            ],
-            linkerSettings: [
-                .linkedFramework("Accelerate"),
-            ]
         ),
     ],
     swiftLanguageModes: [.v6]

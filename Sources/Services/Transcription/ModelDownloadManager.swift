@@ -76,13 +76,12 @@ public actor ModelDownloadManager {
     public nonisolated func isModelDownloaded(_ modelId: String) -> Bool {
         let modelPath = Self.modelsURL.appendingPathComponent(modelId)
         guard FileManager.default.fileExists(atPath: modelPath.path) else { return false }
-        // Qwen3-ASR: check for safetensors + config files
+        // Qwen3-ASR GGUF: requires decoder.gguf + mmproj.gguf
         if modelId.hasPrefix("qwen3") {
-            let required = ["config.json", "vocab.json", "merges.txt"]
-            let hasModel = FileManager.default.fileExists(atPath: modelPath.appendingPathComponent("model.safetensors").path)
-                || FileManager.default.fileExists(atPath: modelPath.appendingPathComponent("model.safetensors.index.json").path)
-            guard hasModel else { return false }
-            return required.allSatisfy { FileManager.default.fileExists(atPath: modelPath.appendingPathComponent($0).path) }
+            guard let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) else { return false }
+            let hasDecoder = contents.contains(where: { $0.hasSuffix(".gguf") && !$0.contains("mmproj") })
+            let hasMmproj  = contents.contains(where: { $0.hasSuffix(".gguf") && $0.contains("mmproj") })
+            return hasDecoder && hasMmproj
         }
         // GGUF: check for non-part files
         if let contents = try? FileManager.default.contentsOfDirectory(atPath: modelPath.path) {
@@ -301,20 +300,20 @@ public let allModels: [ModelInfo] = [
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp32.gguf"]
     ),
-    // Qwen3-ASR safetensors models
+    // Qwen3-ASR GGUF models (decoder + mmproj)
     ModelInfo(
-        id: "qwen3-asr-0.6b", displayName: "Qwen3-ASR 0.6B",
-        fileSize: 1_200_000_000, sizeLabel: "~1.2 GB",
-        hfRepo: "Qwen/Qwen3-ASR-0.6B",
-        msRepo: "Qwen/Qwen3-ASR-0.6B",
-        hfFiles: ["config.json", "model.safetensors", "vocab.json", "merges.txt", "generation_config.json"]
+        id: "qwen3-asr-0.6b-q8", displayName: "Qwen3-ASR 0.6B Q8_0",
+        fileSize: 805_000_000 + 215_000_000, sizeLabel: "~1.0 GB",
+        hfRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
+        msRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
+        hfFiles: ["Qwen3-ASR-0.6B-Q8_0.gguf", "mmproj-Qwen3-ASR-0.6B-Q8_0.gguf"]
     ),
     ModelInfo(
-        id: "qwen3-asr-1.7b", displayName: "Qwen3-ASR 1.7B",
-        fileSize: 3_400_000_000, sizeLabel: "~3.4 GB",
-        hfRepo: "Qwen/Qwen3-ASR-1.7B",
-        msRepo: "Qwen/Qwen3-ASR-1.7B",
-        hfFiles: ["config.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors", "model.safetensors.index.json", "vocab.json", "merges.txt", "generation_config.json"]
+        id: "qwen3-asr-0.6b-bf16", displayName: "Qwen3-ASR 0.6B BF16 (完整精度)",
+        fileSize: 1_510_000_000 + 379_000_000, sizeLabel: "~1.9 GB",
+        hfRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
+        msRepo: "ggml-org/Qwen3-ASR-0.6B-GGUF",
+        hfFiles: ["Qwen3-ASR-0.6B-bf16.gguf", "mmproj-Qwen3-ASR-0.6B-bf16.gguf"]
     ),
 ]
 

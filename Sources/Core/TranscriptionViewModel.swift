@@ -19,20 +19,24 @@ final class TranscriptionViewModel: ObservableObject {
 
     init() {
         setupLocalService()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleOpenFile),
+            name: .voiceGumOpenFile, object: nil)
+    }
+
+    @objc private func handleOpenFile(_ notification: Notification) {
+        guard let url = notification.object as? URL else { return }
+        reset()
+        droppedFileURL = url
     }
 
     private func setupLocalService() {
         guard AppPreferences.shared.asrProvider != "online" else { return }
         guard isModelDownloaded(AppPreferences.shared.asrModel) else { return }
         let modelId = AppPreferences.shared.asrModel
-        if modelId.hasPrefix("qwen3") {
-            let size: QwenASRService.QwenASRModelSize = modelId.contains("1.7b") ? .large : .small
-            let svc = QwenASRService(modelSize: size)
-            try? svc.loadModel()
-            transcriptionService = svc
-        } else {
-            transcriptionService = LocalTranscriptionService(modelId: modelId)
-        }
+        let svc = GGMLTranscriptionService(modelId: modelId)
+        try? svc.loadModel()
+        transcriptionService = svc
     }
 
     private func setupTranscriptionService() async {
@@ -73,7 +77,8 @@ final class TranscriptionViewModel: ObservableObject {
         case "local":
             let modelId = AppPreferences.shared.asrModel
             if modelId.hasPrefix("qwen3") { return "Qwen3-ASR (\(modelId))" }
-            else { return "SenseVoice (\(modelId))" }
+            else if modelId.hasPrefix("sense-voice") { return "SenseVoice (\(modelId))" }
+            else { return serviceName }
         default:
             return serviceName
         }
@@ -90,9 +95,10 @@ final class TranscriptionViewModel: ObservableObject {
 
                 guard AudioFileValidator.isValid(file: fileURL) else {
                     let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64) ?? 0
-                    if size > AudioFileValidator.maxFileSize {
+                    let limit = AudioFileValidator.maxFileSize(for: fileURL)
+                    if size > limit {
                         let mb = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-                        let maxMB = ByteCountFormatter.string(fromByteCount: AudioFileValidator.maxFileSize, countStyle: .file)
+                        let maxMB = ByteCountFormatter.string(fromByteCount: limit, countStyle: .file)
                         state = .failed(error: TranscriptionError.transcriptionFailed("文件过大 (\(mb))，上限 \(maxMB)"))
                     } else {
                         state = .failed(error: TranscriptionError.invalidAudioFormat)
@@ -112,10 +118,8 @@ final class TranscriptionViewModel: ObservableObject {
                     try Task.checkCancellation()
                     state = .preparing(ASR: transcriptionService?.serviceName ?? "ASR")
 
-                    let isLocalService = transcriptionService is LocalTranscriptionService
-
                     state = .transcribing(
-                        progress: isLocalService ? -1 : Double(index) / Double(files.count),
+                        progress: 0,
                         currentFile: index + 1,
                         totalFiles: files.count
                     )
@@ -130,10 +134,20 @@ final class TranscriptionViewModel: ObservableObject {
 
                     let engineDesc = engineDescription(for: service)
 
+                    let ggmlService = transcriptionService as? GGMLTranscriptionService
+                    ggmlService?.onProgress = { [self] pct in
+                        state = .transcribing(
+                            progress: pct,
+                            currentFile: index + 1,
+                            totalFiles: files.count)
+                    }
+
                     let result = try await service.transcribe(
                         file: file,
                         language: AppPreferences.shared.language
                     )
+
+                    ggmlService?.onProgress = nil
 
                     allResults.append(result)
                     if engineDescs.isEmpty || engineDescs.count <= index {
@@ -142,6 +156,9 @@ final class TranscriptionViewModel: ObservableObject {
                 }
 
                 state = .transcribing(progress: 1.0, currentFile: files.count, totalFiles: files.count)
+
+                // Schedule model unload to free memory after idle
+                (transcriptionService as? GGMLTranscriptionService)?.scheduleUnload()
 
                 // Save raw transcription to history first
                 await saveToHistory(results: allResults, files: files, engineDescs: engineDescs, duration: duration)
@@ -195,13 +212,6 @@ final class TranscriptionViewModel: ObservableObject {
     func cancelTranscription() {
         currentTask?.cancel()
         state = .cancelled
-        DispatchQueue.global().async {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-            proc.arguments = ["-f", "sense-voice-main"]
-            try? proc.run()
-            proc.waitUntilExit()
-        }
     }
 
     func retryLastTranscription() {

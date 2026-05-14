@@ -12,6 +12,12 @@ struct VoiceGumApp: App {
         }
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(after: .newItem) {
+                Button(String(localized: "打开音频文件...")) {
+                    appDelegate.openFile()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+            }
             CommandGroup(replacing: .appInfo) {
                 Button(String(localized: "关于 VoiceGum")) {
                     let alert = NSAlert()
