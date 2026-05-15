@@ -28,6 +28,10 @@ final class TranscriptionViewModel: ObservableObject {
             name: .voiceGumWillTerminate, object: nil)
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     @objc private func handleWillTerminate(_ notification: Notification) {
         currentTask?.cancel()
         summarizeTask?.cancel()

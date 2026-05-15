@@ -110,10 +110,8 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         stateLock.lock()
         let isActive = isTranscribing
         stateLock.unlock()
-        // Never free the model while a transcription is in flight —
-        // the C++ code is using it on a background thread and freeing
-        // it concurrently causes a use-after-free crash, which macOS
-        // reports as "quit unexpectedly".
+        // Guard against concurrent transcription — freeing the model
+        // while C++ code holds a pointer causes a use-after-free crash.
         guard !isActive, let h = svHandle else { return }
         sv_free(h)
         self.svHandle = nil
