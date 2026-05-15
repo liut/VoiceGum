@@ -22,13 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Cancel in-flight async work before tearing down native resources.
-        // The C++ ASR engine runs on DispatchQueue.global() and can't be
-        // truly interrupted, but the Swift Task cancellation prevents the
-        // continuation from resuming. The model unload is now guarded by
-        // isTranscribing so it won't free while C++ code is still executing.
+        // Cancel in-flight async tasks then mark the service as terminating.
+        // The service skips sv_free during termination — the OS reclaims all
+        // memory (including GPU) when the process exits. Calling ggml Metal
+        // cleanup during teardown can crash on some hardware.
         NotificationCenter.default.post(name: .voiceGumWillTerminate, object: nil)
-        GGMLTranscriptionService.invalidateActiveModel()
+        GGMLTranscriptionService.prepareForTermination()
         return .terminateNow
     }
 

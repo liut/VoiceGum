@@ -8,6 +8,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
     public var onProgress: ((Double) -> Void)?
 
     private nonisolated(unsafe) static weak var activeInstance: GGMLTranscriptionService?
+    private nonisolated(unsafe) static var isTerminating = false
 
     private let stateLock = NSLock()
     private var svHandle: UnsafeMutableRawPointer?
@@ -24,6 +25,14 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
 
     public static func invalidateActiveModel() {
         activeInstance?.unload()
+        activeInstance = nil
+    }
+
+    /// Mark the process as terminating so subsequent unload() calls skip sv_free.
+    /// The OS reclaims all memory (including GPU) on process exit.
+    public static func prepareForTermination() {
+        isTerminating = true
+        activeInstance?.cancelUnloadTimer()
         activeInstance = nil
     }
 
@@ -110,9 +119,12 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         stateLock.lock()
         let isActive = isTranscribing
         stateLock.unlock()
-        // Guard against concurrent transcription — freeing the model
-        // while C++ code holds a pointer causes a use-after-free crash.
         guard !isActive, let h = svHandle else { return }
+        // During process termination skip sv_free — the OS reclaims all
+        // resources. Calling ggml Metal cleanup during teardown can crash
+        // on some hardware (e.g. Intel MacBook Air) where the GPU driver
+        // behaves differently during process exit.
+        if Self.isTerminating { return }
         sv_free(h)
         self.svHandle = nil
     }
@@ -130,7 +142,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: workItem)
     }
 
-    private func cancelUnloadTimer() {
+    func cancelUnloadTimer() {
         unloadWorkItem?.cancel()
         unloadWorkItem = nil
     }
