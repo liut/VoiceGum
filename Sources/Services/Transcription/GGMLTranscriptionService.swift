@@ -8,7 +8,6 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
     public var onProgress: ((Double) -> Void)?
 
     private nonisolated(unsafe) static weak var activeInstance: GGMLTranscriptionService?
-    private nonisolated(unsafe) static var isTerminating = false
 
     private let stateLock = NSLock()
     private var svHandle: UnsafeMutableRawPointer?
@@ -23,17 +22,36 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         ).first!.appendingPathComponent("VoiceGum/Models")
     }
 
+    public static var isTranscribingActive: Bool {
+        guard let instance = activeInstance else { return false }
+        return instance.syncIsTranscribing
+    }
+
     public static func invalidateActiveModel() {
         activeInstance?.unload()
         activeInstance = nil
     }
 
-    /// Mark the process as terminating so subsequent unload() calls skip sv_free.
-    /// The OS reclaims all memory (including GPU) on process exit.
-    public static func prepareForTermination() {
-        isTerminating = true
-        activeInstance?.cancelUnloadTimer()
-        activeInstance = nil
+    /// Poll until the active transcription finishes, then return.
+    /// Called during app termination when a transcription is in flight —
+    /// we must wait for the C++ thread to release ggml Metal resources
+    /// before freeing the model, otherwise the static destructors crash.
+    public static func waitForTranscriptionCompletion() async {
+        guard let instance = activeInstance else { return }
+        // Busy-wait with yielding — the transcription runs on a
+        // DispatchQueue.global() thread and can't be truly interrupted,
+        // but cancelling the Swift Task causes the loop to exit at the
+        // next checkCancellation point.
+        while instance.syncIsTranscribing {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+    }
+
+    /// Thread-safe synchronous check, usable from async contexts.
+    private var syncIsTranscribing: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return isTranscribing
     }
 
     public func loadModel() throws {
@@ -119,12 +137,9 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         stateLock.lock()
         let isActive = isTranscribing
         stateLock.unlock()
+        // Guard against concurrent transcription — freeing the model
+        // while C++ code holds a pointer causes a use-after-free crash.
         guard !isActive, let h = svHandle else { return }
-        // During process termination skip sv_free — the OS reclaims all
-        // resources. Calling ggml Metal cleanup during teardown can crash
-        // on some hardware (e.g. Intel MacBook Air) where the GPU driver
-        // behaves differently during process exit.
-        if Self.isTerminating { return }
         sv_free(h)
         self.svHandle = nil
     }

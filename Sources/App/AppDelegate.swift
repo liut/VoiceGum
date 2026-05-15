@@ -22,13 +22,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Cancel in-flight async tasks then mark the service as terminating.
-        // The service skips sv_free during termination — the OS reclaims all
-        // memory (including GPU) when the process exits. Calling ggml Metal
-        // cleanup during teardown can crash on some hardware.
+        // Cancel in-flight async tasks so the transcription loop exits.
         NotificationCenter.default.post(name: .voiceGumWillTerminate, object: nil)
-        GGMLTranscriptionService.prepareForTermination()
-        return .terminateNow
+
+        guard GGMLTranscriptionService.isTranscribingActive else {
+            // Not transcribing — free the model now so ggml's C++ static
+            // destructors (which run during exit()) find clean Metal state.
+            GGMLTranscriptionService.invalidateActiveModel()
+            return .terminateNow
+        }
+
+        // Transcription is in progress — defer termination until it finishes,
+        // then free the model. If we exit while the C++ transcription thread
+        // holds ggml Metal resources, the static destructors will crash.
+        Task { @MainActor in
+            await GGMLTranscriptionService.waitForTranscriptionCompletion()
+            GGMLTranscriptionService.invalidateActiveModel()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
