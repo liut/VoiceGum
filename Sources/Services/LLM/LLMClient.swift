@@ -69,6 +69,7 @@ public actor LLMClient {
     }
 
     public func isConfigured() -> Bool {
+        if provider == .ollama { return true }
         guard let _ = baseURL else { return false }
         if provider.requiresAPIKey {
             return apiKey != nil && !apiKey!.isEmpty

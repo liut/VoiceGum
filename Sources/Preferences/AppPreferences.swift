@@ -17,7 +17,17 @@ public final class AppPreferences: @unchecked Sendable {
         static let llmProvider = "voicegum.llmProvider"
     }
 
-    private init() {}
+    private init() {
+        sanitizeProvider()
+    }
+
+    private func sanitizeProvider() {
+        let validProviders = ["ollama", "openai", "azure", "anthropic"]
+        let current = defaults.string(forKey: Keys.llmProvider) ?? ""
+        if !current.isEmpty, !validProviders.contains(current) {
+            defaults.set("openai", forKey: Keys.llmProvider)
+        }
+    }
 
     // MARK: - ASR
 
@@ -143,7 +153,7 @@ public final class AppPreferences: @unchecked Sendable {
     private func defaultModel(for provider: String) -> String {
         switch provider {
         case "anthropic": return "claude-haiku-3-5"
-        case "ollama": return "llama3"
+        case "ollama": return "llama3.2"
         default: return "gpt-4o-mini"
         }
     }

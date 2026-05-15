@@ -32,5 +32,10 @@
     <string>NSApplication</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>VoiceGum needs microphone access for voice recording.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

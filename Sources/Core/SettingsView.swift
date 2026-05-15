@@ -402,9 +402,9 @@ struct LLMSettingsTab: View {
                 default: .openai
                 }
                 await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: llmModel)
-                let result = try await LLMClient.shared.refine(text: "测试", customPrompt: refinePrompt.isEmpty ? nil : refinePrompt)
+                let result = try await LLMClient.shared.refine(text: "hello", customPrompt: "Reply with just 'OK'")
                 testSuccess = true
-                testError = "成功: \(result.prefix(100))"
+                testError = "连接成功"
             } catch let err as LLMClientError {
                 testError = "\(err.localizedDescription)"
             } catch {

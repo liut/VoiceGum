@@ -232,9 +232,10 @@ final class TranscriptionViewModel: ObservableObject {
 
     func summarize() {
         guard case .completed(let results, _) = state, !isSummarizing else { return }
+        let provider = AppPreferences.shared.llmProvider
         let baseURL = AppPreferences.shared.llmBaseURL()
         guard !baseURL.isEmpty else {
-            summaryText = "摘要失败: Base URL 为空 provider=\(AppPreferences.shared.llmProvider)"
+            summaryText = "摘要失败: Base URL 为空 provider=\(provider)"
             return
         }
 
