@@ -17,6 +17,10 @@ final class TranscriptionViewModel: ObservableObject {
     private var currentTask: Task<Void, Never>?
     private var summarizeTask: Task<Void, Never>?
     private var lastHistoryEntryIds: [String] = []
+    private var transcriptionDuration: TimeInterval?
+    private var targetProgress: Double = 0
+    private var displayTimer: Timer?
+    private var transcriptionStartTime: Date?
 
     init() {
         setupLocalService()
@@ -33,6 +37,7 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     @objc private func handleWillTerminate(_ notification: Notification) {
+        stopProgressTimer()
         currentTask?.cancel()
         summarizeTask?.cancel()
     }
@@ -143,6 +148,7 @@ final class TranscriptionViewModel: ObservableObject {
                     )
 
                     guard let service = transcriptionService else {
+                        stopProgressTimer()
                         let modelName = AppPreferences.shared.asrModel
                         state = .failed(error: TranscriptionError.transcriptionFailed(
                             "模型 \"\(modelName)\" 尚未下载。\n请前往设置 → ASR → 本地模型 下载后再试。"
@@ -153,11 +159,24 @@ final class TranscriptionViewModel: ObservableObject {
                     let engineDesc = engineDescription(for: service)
 
                     let ggmlService = transcriptionService as? GGMLTranscriptionService
+
+                    // Start smooth progress timer for local ASR only
+                    if ggmlService != nil, let dur = duration {
+                        transcriptionDuration = dur
+                        targetProgress = 0
+                        transcriptionStartTime = Date()
+                        startProgressTimer()
+                    }
+
                     ggmlService?.onProgress = { [self] pct in
-                        state = .transcribing(
-                            progress: pct,
-                            currentFile: index + 1,
-                            totalFiles: files.count)
+                        targetProgress = max(targetProgress, pct)
+                        if pct >= 1.0 {
+                            stopProgressTimer()
+                            state = .transcribing(
+                                progress: 1.0,
+                                currentFile: index + 1,
+                                totalFiles: files.count)
+                        }
                     }
 
                     let result = try await service.transcribe(
@@ -166,6 +185,7 @@ final class TranscriptionViewModel: ObservableObject {
                     )
 
                     ggmlService?.onProgress = nil
+                    stopProgressTimer()
 
                     allResults.append(result)
                     if engineDescs.isEmpty || engineDescs.count <= index {
@@ -218,6 +238,7 @@ final class TranscriptionViewModel: ObservableObject {
                 if AppPreferences.shared.autoSummaryEnabled && llmConfigured { summarize() }
 
             } catch {
+                stopProgressTimer()
                 if Task.isCancelled {
                     state = .cancelled
                 } else {
@@ -228,6 +249,7 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     func cancelTranscription() {
+        stopProgressTimer()
         currentTask?.cancel()
         state = .cancelled
     }
@@ -238,6 +260,7 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     func reset() {
+        stopProgressTimer()
         droppedFileURL = nil
         state = .idle
         summaryText = nil
@@ -351,6 +374,40 @@ final class TranscriptionViewModel: ObservableObject {
             return seconds.isFinite && seconds > 0 ? seconds : nil
         } catch {
             return nil
+        }
+    }
+
+    private func startProgressTimer() {
+        stopProgressTimer()
+        displayTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.tickProgress()
+            }
+        }
+    }
+
+    private func stopProgressTimer() {
+        displayTimer?.invalidate()
+        displayTimer = nil
+    }
+
+    private func tickProgress() {
+        guard let start = transcriptionStartTime,
+              let duration = transcriptionDuration,
+              duration > 0 else { return }
+
+        let elapsed = Date().timeIntervalSince(start)
+        let estimatedTotal = max(duration * 0.05, 1.0)
+        let elapsedRatio = min(elapsed / estimatedTotal, 0.99)
+
+        guard case .transcribing(let current, let file, let total) = state else { return }
+
+        let step = 0.02
+        let smoothed = max(current + step, elapsedRatio)
+        let displayProgress = min(smoothed, targetProgress + 0.03, 0.99)
+
+        if displayProgress > current {
+            state = .transcribing(progress: displayProgress, currentFile: file, totalFiles: total)
         }
     }
 

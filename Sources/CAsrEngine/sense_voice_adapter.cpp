@@ -15,6 +15,23 @@ struct sense_voice_wrapper {
     bool loaded = false;
 };
 
+struct progress_bridge {
+    asr_progress_fn fn;
+    void *data;
+};
+
+static void bridge_progress_callback(
+    sense_voice_context * /*ctx*/,
+    sense_voice_state * /*state*/,
+    int progress,
+    void *user_data)
+{
+    auto *bridge = static_cast<progress_bridge *>(user_data);
+    if (bridge && bridge->fn) {
+        bridge->fn(progress / 100.0f, bridge->data);
+    }
+}
+
 extern "C" {
 
 void * sv_load_model(const char * gguf_path, int use_gpu) {
@@ -76,15 +93,17 @@ char * sv_transcribe(
     // (VAD is complex, porting would take significant effort)
     ctx->state->duration = (float)pcmf64.size() / sample_rate;
 
-    if (on_progress) on_progress(0.1f, progress_userdata);
+    progress_bridge bridge = { on_progress, progress_userdata };
+    if (on_progress) {
+        wparams.progress_callback = bridge_progress_callback;
+        wparams.progress_callback_user_data = &bridge;
+    }
 
     int ret = sense_voice_full_parallel(ctx, wparams, pcmf64, (int)pcmf64.size(), 1);
     if (ret != 0) {
         fprintf(stderr, "sv: transcription failed, ret=%d\n", ret);
         return nullptr;
     }
-
-    if (on_progress) on_progress(0.9f, progress_userdata);
 
     // Extract text from decoder output
     std::string text;

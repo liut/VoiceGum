@@ -733,6 +733,9 @@ int sense_voice_full_with_state(
     // compute features (fbank + cmvn)
     if (n_samples > 0) {
         sense_voice_pcm_to_feature_with_state(ctx, state, pcmf32, params.debug_mode, params.n_threads);
+        if (params.progress_callback) {
+            params.progress_callback(ctx, state, 15, params.progress_callback_user_data);
+        }
     }
     // initialize the decoders
     int n_decoders = 1;
@@ -763,10 +766,17 @@ int sense_voice_full_with_state(
         SENSE_VOICE_LOG_ERROR("%s: failed to encode\n", __func__);
         return -6;
     }
+    if (params.progress_callback) {
+        params.progress_callback(ctx, state, 50, params.progress_callback_user_data);
+    }
+
     // encode audio features starting at offset seek
     if (!sense_voice_decode_internal(*ctx, *state, params.n_threads)) {
         SENSE_VOICE_LOG_ERROR("%s: failed to decode\n", __func__);
         return -6;
+    }
+    if (params.progress_callback) {
+        params.progress_callback(ctx, state, 95, params.progress_callback_user_data);
     }
 
     SENSE_VOICE_LOG_DEBUG("\n%s: decoder audio use %f s, rtf is %f. \n\n",
