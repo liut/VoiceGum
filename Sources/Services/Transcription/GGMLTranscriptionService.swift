@@ -107,10 +107,16 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
 
     public func unload() {
         cancelUnloadTimer()
-        if let h = svHandle {
-            sv_free(h)
-            self.svHandle = nil
-        }
+        stateLock.lock()
+        let isActive = isTranscribing
+        stateLock.unlock()
+        // Never free the model while a transcription is in flight —
+        // the C++ code is using it on a background thread and freeing
+        // it concurrently causes a use-after-free crash, which macOS
+        // reports as "quit unexpectedly".
+        guard !isActive, let h = svHandle else { return }
+        sv_free(h)
+        self.svHandle = nil
     }
 
     public func scheduleUnload(after seconds: TimeInterval = 5) {

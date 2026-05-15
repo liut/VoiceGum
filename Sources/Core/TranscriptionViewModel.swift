@@ -15,6 +15,7 @@ final class TranscriptionViewModel: ObservableObject {
 
     private var transcriptionService: TranscriptionService?
     private var currentTask: Task<Void, Never>?
+    private var summarizeTask: Task<Void, Never>?
     private var lastHistoryEntryIds: [String] = []
 
     init() {
@@ -22,6 +23,14 @@ final class TranscriptionViewModel: ObservableObject {
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleOpenFile),
             name: .voiceGumOpenFile, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleWillTerminate),
+            name: .voiceGumWillTerminate, object: nil)
+    }
+
+    @objc private func handleWillTerminate(_ notification: Notification) {
+        currentTask?.cancel()
+        summarizeTask?.cancel()
     }
 
     @objc private func handleOpenFile(_ notification: Notification) {
@@ -245,7 +254,7 @@ final class TranscriptionViewModel: ObservableObject {
         isSummarizing = true
         summaryText = nil
 
-        Task {
+        summarizeTask = Task {
             do {
                 let prompt = AppPreferences.shared.summaryPrompt
                 let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)

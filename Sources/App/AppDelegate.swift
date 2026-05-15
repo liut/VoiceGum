@@ -21,8 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { _ = await Logger.shared.getLogPath() }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Cancel in-flight async work before tearing down native resources.
+        // The C++ ASR engine runs on DispatchQueue.global() and can't be
+        // truly interrupted, but the Swift Task cancellation prevents the
+        // continuation from resuming. The model unload is now guarded by
+        // isTranscribing so it won't free while C++ code is still executing.
+        NotificationCenter.default.post(name: .voiceGumWillTerminate, object: nil)
         GGMLTranscriptionService.invalidateActiveModel()
+        return .terminateNow
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
