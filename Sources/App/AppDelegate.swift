@@ -3,6 +3,7 @@ import SwiftUI
 import CAsrEngine
 import VoiceGumCore
 import VoiceGumServices
+import Darwin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -41,6 +42,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // sv_free (called in applicationShouldTerminate) frees the ggml
+        // context and Metal buffers, but ggml's static device vector may
+        // retain stale resource-set entries. exit() → __cxa_finalize_ranges
+        // then crashes in ggml_metal_device_free. Bypass with _exit —
+        // the OS reclaims all memory including GPU, no actual leak.
+        _exit(0)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
