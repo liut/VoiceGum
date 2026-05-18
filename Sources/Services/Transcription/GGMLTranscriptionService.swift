@@ -154,7 +154,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
             self.unload()
         }
         unloadWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: workItem)
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: workItem)
     }
 
     func cancelUnloadTimer() {

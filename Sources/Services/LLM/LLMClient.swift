@@ -59,6 +59,16 @@ public actor LLMClient {
     private var provider: LLMProvider = .openai
     private var model: String = "gpt-4o-mini"
 
+    /// Background URLSession to avoid blocking main queue with LLM API calls.
+    /// URLSession.shared dispatches to main queue → "process not responding" during long requests.
+    private nonisolated let urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        let queue = OperationQueue()
+        queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = 1
+        return URLSession(configuration: config, delegate: nil, delegateQueue: queue)
+    }()
+
     public init() {}
 
     public func configure(provider: LLMProvider, baseURL: URL, apiKey: String?, model: String) {
@@ -86,6 +96,21 @@ public actor LLMClient {
             return base.appendingPathComponent(rest)
         }
         return base.appendingPathComponent(path)
+    }
+
+    /// Performs a data request on the background URLSession, resuming on the session's delegate queue.
+    private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            urlSession.dataTask(with: request) { data, response, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let data, let response {
+                    continuation.resume(returning: (data, response))
+                } else {
+                    continuation.resume(throwing: LLMClientError.networkFailed("无数据或响应"))
+                }
+            }.resume()
+        }
     }
 
     public func refine(text: String, customPrompt: String? = nil) async throws -> String {
@@ -146,7 +171,7 @@ public actor LLMClient {
         await Logger.shared.info("OpenAI 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
 
         let data: Data, response: URLResponse
-        do { (data, response) = try await URLSession.shared.data(for: request) }
+        do { (data, response) = try await performRequest( request) }
         catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -199,7 +224,7 @@ public actor LLMClient {
         await Logger.shared.info("Anthropic 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
 
         let data: Data, response: URLResponse
-        do { (data, response) = try await URLSession.shared.data(for: request) }
+        do { (data, response) = try await performRequest( request) }
         catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -251,7 +276,7 @@ public actor LLMClient {
         await Logger.shared.info("Ollama 请求: \(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "")")
 
         let data: Data, response: URLResponse
-        do { (data, response) = try await URLSession.shared.data(for: request) }
+        do { (data, response) = try await performRequest( request) }
         catch { throw LLMClientError.networkFailed("\(error.localizedDescription) URL: \(url.absoluteString)") }
 
         guard let httpResponse = response as? HTTPURLResponse else {

@@ -205,35 +205,56 @@ final class TranscriptionViewModel: ObservableObject {
                 let llmConfigured = !AppPreferences.shared.llmBaseURL().isEmpty
                 if llmConfigured { await configureLLMClient() }
 
-                // Refine
+                // Refine — hand off to a background task so the @MainActor task ends here.
+                // Keeping the @MainActor task alive across the LLM call causes macOS
+                // to flag the process as "not responding" during long API requests.
                 if AppPreferences.shared.autoRefineEnabled && llmConfigured {
                     try? await Task.sleep(nanoseconds: 500_000_000)
 
                     state = .refining
 
-                    var refinedResults: [TranscriptionResult] = []
-                    for (index, result) in allResults.enumerated() {
-                        try Task.checkCancellation()
-                        let prompt = AppPreferences.shared.refinePrompt
-                        let refinedText = try await LLMClient.shared.refine(text: result.text, customPrompt: prompt.isEmpty ? nil : prompt)
-                        refinedResults.append(TranscriptionResult(
-                            text: refinedText,
-                            timestamps: result.timestamps,
-                            language: result.language,
-                            confidence: result.confidence
-                        ))
-                        if lastHistoryEntryIds.indices.contains(index) {
-                            let id = lastHistoryEntryIds[index]
-                            await HistoryManager.shared.updateRefinedText(id: id, refinedText: refinedText)
+                    let capturedResults = allResults
+                    let capturedFiles = files
+                    let capturedEngineDescs = engineDescs
+                    let capturedEntryIds = lastHistoryEntryIds
+                    let capturedSummaryEnabled = AppPreferences.shared.autoSummaryEnabled
+
+                    Task.detached(priority: .userInitiated) { [weak self] in
+                        guard let self else { return }
+                        do {
+                            var refined: [TranscriptionResult] = []
+                            for (index, result) in capturedResults.enumerated() {
+                                let prompt = AppPreferences.shared.refinePrompt
+                                let text = try await LLMClient.shared.refine(
+                                    text: result.text,
+                                    customPrompt: prompt.isEmpty ? nil : prompt)
+                                refined.append(TranscriptionResult(
+                                    text: text,
+                                    timestamps: result.timestamps,
+                                    language: result.language,
+                                    confidence: result.confidence))
+                                let id = capturedEntryIds.indices.contains(index) ? capturedEntryIds[index] : nil
+                                if let id {
+                                    await HistoryManager.shared.updateRefinedText(id: id, refinedText: text)
+                                }
+                            }
+                            await MainActor.run { [weak self] in
+                                self?.state = .completed(results: refined, files: capturedFiles)
+                                self?.saveResults(refined, files: capturedFiles, engineDescs: capturedEngineDescs)
+                                if capturedSummaryEnabled { self?.summarize() }
+                            }
+                        } catch {
+                            await MainActor.run { [weak self] in
+                                self?.state = .failed(error: error)
+                            }
                         }
                     }
-
-                    state = .completed(results: refinedResults, files: files)
-                    saveResults(refinedResults, files: files, engineDescs: engineDescs)
-                } else {
-                    state = .completed(results: allResults, files: files)
-                    saveResults(allResults, files: files, engineDescs: engineDescs)
+                    // @MainActor task ends here — main RunLoop stays free
+                    return
                 }
+
+                state = .completed(results: allResults, files: files)
+                saveResults(allResults, files: files, engineDescs: engineDescs)
 
                 if AppPreferences.shared.autoSummaryEnabled && llmConfigured { summarize() }
 
@@ -284,7 +305,9 @@ final class TranscriptionViewModel: ObservableObject {
         summarizeTask = Task {
             do {
                 let prompt = AppPreferences.shared.summaryPrompt
-                let result = try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try await LLMClient.shared.summarize(text: textToSummarize, customPrompt: prompt.isEmpty ? nil : prompt)
+                }.value
                 summaryText = result
                 if let id = lastHistoryEntryIds.first {
                     await HistoryManager.shared.updateSummary(id: id, summaryText: result)
