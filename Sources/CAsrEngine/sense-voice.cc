@@ -595,8 +595,52 @@ struct sense_voice_state *sense_voice_init_state(sense_voice_context *ctx) {
             return nullptr;
         }
 
-        SENSE_VOICE_LOG_INFO("%s: compute buffer (encoder)   = %7.2f MB\n", __func__,
+        SENSE_VOICE_LOG_INFO("%s: compute buffer (vad)       = %7.2f MB\n", __func__,
                              sense_voice_sched_size(state->sched_vad) / 1e6);
+    }
+
+    // allocate VAD LSTM persistent state tensors.
+    // silero_vad_encode_internal reads/writes these via ggml_backend_tensor_copy
+    // to persist LSTM hidden/cell state across successive 40ms chunks.
+    // These were declared in sense_voice_state but never allocated — calling VAD
+    // without this allocation would crash on the first backend tensor copy.
+    {
+        ggml_cgraph *gf = silero_vad_build_graph(*ctx, *state);
+        struct ggml_tensor *in_lstm_context = ggml_graph_get_tensor(gf, "in_lstm_context");
+        const int vad_hidden_size = (int)in_lstm_context->ne[0];
+
+        SENSE_VOICE_LOG_INFO("%s: VAD LSTM hidden size = %d\n", __func__, vad_hidden_size);
+
+        state->vad_ctx = ggml_init({
+            /*.mem_size   =*/ ggml_tensor_overhead() * 2,
+            /*.mem_buffer =*/ nullptr,
+            /*.no_alloc   =*/ true,
+        });
+
+        state->vad_lstm_hidden_state = ggml_new_tensor_1d(
+            state->vad_ctx, GGML_TYPE_F32, vad_hidden_size);
+        state->vad_lstm_context = ggml_new_tensor_1d(
+            state->vad_ctx, GGML_TYPE_F32, vad_hidden_size);
+
+        const size_t align = ggml_backend_get_alignment(state->backends[0]);
+        state->vad_lstm_hidden_state_buffer = ggml_backend_alloc_buffer(
+            state->backends[0],
+            ggml_nbytes(state->vad_lstm_hidden_state) + align);
+        state->vad_lstm_context_buffer = ggml_backend_alloc_buffer(
+            state->backends[0],
+            ggml_nbytes(state->vad_lstm_context) + align);
+
+        {
+            auto alloc = ggml_tallocr_new(state->vad_lstm_hidden_state_buffer);
+            ggml_tallocr_alloc(&alloc, state->vad_lstm_hidden_state);
+        }
+        {
+            auto alloc = ggml_tallocr_new(state->vad_lstm_context_buffer);
+            ggml_tallocr_alloc(&alloc, state->vad_lstm_context);
+        }
+
+        ggml_backend_buffer_clear(state->vad_lstm_hidden_state_buffer, 0);
+        ggml_backend_buffer_clear(state->vad_lstm_context_buffer, 0);
     }
 
     // encoder allocator

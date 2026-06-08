@@ -70,4 +70,6 @@ SENSEVOICE_API double silero_vad_with_state(sense_voice_context &ctx,
                            std::vector<float> &pcmf32,
                            int n_processors);
 
+SENSEVOICE_API void silero_vad_reset_state(sense_voice_state &state);
+
 #endif//SENSEVOICE_CPP_SILERO_VAD_H

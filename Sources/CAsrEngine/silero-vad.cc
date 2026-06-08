@@ -201,3 +201,121 @@ bool silero_vad_encode_internal(sense_voice_context &ctx,
     }
     return true;
 }
+
+// Silero VAD: 40ms sliding window → LSTM → sigmoid → speech probability per chunk.
+// The LSTM state persists across chunks via state.vad_lstm_* tensors.
+// After collecting per-chunk probabilities, a hysteresis state machine extracts
+// speech segments with configurable min-speech / min-silence / padding thresholds.
+//
+// Audio must be normalized to [-1, 1] — unnormalized int16 values (±32768)
+// saturate the model, producing uniform ~0.45 probabilities.
+
+// VAD segmentation parameters
+#define VAD_THRESHOLD       0.3f
+#define VAD_MIN_SPEECH_MS   250
+#define VAD_MIN_SILENCE_MS  100
+#define VAD_SPEECH_PAD_MS   30
+
+void silero_vad_reset_state(sense_voice_state &state) {
+    if (state.vad_lstm_hidden_state_buffer) {
+        ggml_backend_buffer_clear(state.vad_lstm_hidden_state_buffer, 0);
+    }
+    if (state.vad_lstm_context_buffer) {
+        ggml_backend_buffer_clear(state.vad_lstm_context_buffer, 0);
+    }
+}
+
+double silero_vad_with_state(sense_voice_context &ctx,
+                           sense_voice_state &state,
+                           std::vector<float> &pcmf32,
+                           int n_processors) {
+
+    const int samples_per_ms   = SENSE_VOICE_SAMPLE_RATE / 1000;
+    const int min_speech_samp  = VAD_MIN_SPEECH_MS  * samples_per_ms;
+    const int min_silence_samp = VAD_MIN_SILENCE_MS * samples_per_ms;
+    const int speech_pad_samp  = VAD_SPEECH_PAD_MS  * samples_per_ms;
+
+    const size_t n_samples = pcmf32.size();
+
+    // Step 1: run VAD on every chunk, collect probabilities
+    std::vector<float> speech_probs;
+    speech_probs.reserve(n_samples / VAD_CHUNK_SIZE + 2);
+
+    for (size_t i = 0; i + VAD_CHUNK_SIZE <= n_samples; i += VAD_CHUNK_SIZE) {
+        std::vector<float> chunk(
+            pcmf32.begin() + i,
+            pcmf32.begin() + i + VAD_CHUNK_SIZE);
+        float prob = 0.0f;
+        if (!silero_vad_encode_internal(ctx, state, chunk, n_processors, prob)) {
+            continue;
+        }
+        speech_probs.push_back(prob);
+    }
+
+    // Handle trailing partial chunk
+    size_t remaining_start = (n_samples / VAD_CHUNK_SIZE) * VAD_CHUNK_SIZE;
+    if (remaining_start < n_samples) {
+        std::vector<float> chunk(
+            pcmf32.begin() + remaining_start,
+            pcmf32.end());
+        chunk.resize(VAD_CHUNK_SIZE, 0.0f);
+        float prob = 0.0f;
+        silero_vad_encode_internal(ctx, state, chunk, n_processors, prob);
+        speech_probs.push_back(prob);
+    }
+
+    // Step 2: state-machine segmenter
+    bool in_speech = false;
+    std::vector<sense_voice_segment> segments;
+    size_t speech_start = 0;
+
+    for (size_t i = 0; i < speech_probs.size(); i++) {
+        bool is_speech = (speech_probs[i] >= VAD_THRESHOLD);
+
+        if (is_speech && !in_speech) {
+            speech_start = i * VAD_CHUNK_SIZE;
+            speech_start = (speech_start > (size_t)speech_pad_samp)
+                ? speech_start - speech_pad_samp : 0;
+            in_speech = true;
+        }
+
+        if (!is_speech && in_speech) {
+            size_t silence_start_sample = i * VAD_CHUNK_SIZE;
+            size_t j;
+            for (j = i; j < speech_probs.size() && speech_probs[j] < VAD_THRESHOLD; j++);
+            size_t silence_duration = (j - i) * VAD_CHUNK_SIZE;
+
+            if (silence_duration >= (size_t)min_silence_samp) {
+                size_t speech_end = silence_start_sample + speech_pad_samp;
+                if (speech_end > n_samples) speech_end = n_samples;
+
+                sense_voice_segment seg;
+                seg.t0 = speech_start;
+                seg.t1 = speech_end;
+                seg.samples.assign(
+                    pcmf32.begin() + speech_start,
+                    pcmf32.begin() + speech_end);
+                segments.push_back(std::move(seg));
+                in_speech = false;
+            }
+        }
+    }
+
+    if (in_speech) {
+        sense_voice_segment seg;
+        seg.t0 = speech_start;
+        seg.t1 = n_samples;
+        seg.samples.assign(
+            pcmf32.begin() + speech_start,
+            pcmf32.end());
+        // Filter: ignore trailing speech shorter than min_speech_samp
+        if (seg.samples.size() >= (size_t)min_speech_samp) {
+            segments.push_back(std::move(seg));
+        }
+    }
+
+    SENSE_VOICE_LOG_INFO("%s: found %zu speech segments\n", __func__, segments.size());
+
+    state.result_all = std::move(segments);
+    return state.result_all.empty() ? 0.0 : 1.0;
+}
