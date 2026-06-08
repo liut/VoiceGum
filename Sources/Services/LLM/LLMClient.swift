@@ -23,12 +23,7 @@ public enum LLMProvider: String, CaseIterable, Sendable {
     }
 
     public var defaultModel: String {
-        switch self {
-        case .ollama: return "llama3.2"
-        case .openai: return "gpt-4o-mini"
-        case .azure: return "gpt-4o-mini"
-        case .anthropic: return "claude-sonnet-4-20250514"
-        }
+        return ""
     }
 }
 
@@ -57,7 +52,7 @@ public actor LLMClient {
     private var baseURL: URL?
     private var apiKey: String?
     private var provider: LLMProvider = .openai
-    private var model: String = "gpt-4o-mini"
+    private var model: String = ""
 
     /// Background URLSession to avoid blocking main queue with LLM API calls.
     /// URLSession.shared dispatches to main queue → "process not responding" during long requests.

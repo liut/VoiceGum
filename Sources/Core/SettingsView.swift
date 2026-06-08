@@ -320,6 +320,8 @@ struct LLMSettingsTab: View {
     @State private var apiKey = ""
     @State private var testSuccess = false
     @State private var testError = ""
+    @State private var modelMissingError: String? = nil
+    @FocusState private var modelFieldFocused: Bool
 
     let providers = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
 
@@ -331,11 +333,30 @@ struct LLMSettingsTab: View {
                 }.onChange(of: llmProvider) { _, newProvider in
                     AppPreferences.shared.llmProvider = newProvider
                     loadProviderConfig()
+                    modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? String(localized: "请输入模型名称")
+                        : nil
                 }
                 TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
                     .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
                 TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
-                    .onChange(of: llmModel) { AppPreferences.shared.setLLMModel(llmModel) }
+                    .focused($modelFieldFocused)
+                    .onChange(of: llmModel) {
+                        AppPreferences.shared.setLLMModel(llmModel)
+                        if !llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            modelMissingError = nil
+                        }
+                    }
+                    .onChange(of: modelFieldFocused) { _, focused in
+                        if !focused {
+                            modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? String(localized: "请输入模型名称")
+                                : nil
+                        }
+                    }
+                if let err = modelMissingError {
+                    Text(err).foregroundColor(.red).font(.caption)
+                }
                 SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
                     .onChange(of: apiKey) { saveAPIKey() }
             }

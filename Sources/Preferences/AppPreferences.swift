@@ -151,10 +151,6 @@ public final class AppPreferences: @unchecked Sendable {
     }
 
     private func defaultModel(for provider: String) -> String {
-        switch provider {
-        case "anthropic": return "claude-haiku-3-5"
-        case "ollama": return "llama3.2"
-        default: return "gpt-4o-mini"
-        }
+        return ""
     }
 }
