@@ -120,13 +120,37 @@ char * sv_transcribe(
 
     std::string text;
 
-    // Determine the audio to transcribe: concatenate VAD segments with
-    // short silence gaps, or fall back to the full audio if VAD found nothing.
-    std::vector<double> transcribe_pcmf64;
-    float progress_base = 0.0f;
+    // Batch segments into ~30s chunks for ASR.
+    // Concatenating adjacent segments preserves local encoder context, but
+    // the 50-layer self-attention degrades beyond ~30s. Batching keeps each
+    // ASR call within the effective attention window.
+    const float MAX_CHUNK_SECONDS = 30.0f;
+    const size_t max_chunk_samples = (size_t)(SENSE_VOICE_SAMPLE_RATE * MAX_CHUNK_SECONDS);
+    const size_t silence_samples = (size_t)(SENSE_VOICE_SAMPLE_RATE * 0.2); // 200ms
+
+    auto transcribe_batch = [&](std::vector<double> &batch) -> bool {
+        if (batch.empty()) return true;
+        ctx->state->result_all.clear();
+        ctx->state->segmentIDs.clear();
+        ctx->state->duration = (float)batch.size() / SENSE_VOICE_SAMPLE_RATE;
+
+        int ret = sense_voice_full_parallel(ctx, wparams, batch, (int)batch.size(), 1);
+        if (ret != 0) {
+            SENSE_VOICE_LOG_ERROR("%s: batch transcription failed, ret=%d\n", __func__, ret);
+            return false;
+        }
+
+        auto &ids = ctx->state->ids;
+        for (size_t i = 4; i < ids.size(); i++) {
+            if (i > 4 && ids[i-1] == ids[i]) continue;
+            if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
+        }
+        return true;
+    };
 
     if (!segments.empty()) {
-        const size_t silence_samples = (size_t)(SENSE_VOICE_SAMPLE_RATE * 0.2); // 200ms
+        std::vector<double> batch;
+        size_t batch_seg_count = 0;
 
         for (size_t si = 0; si < segments.size(); si++) {
             auto &seg = segments[si];
@@ -138,52 +162,34 @@ char * sv_transcribe(
                 continue;
             }
 
-            if (!transcribe_pcmf64.empty()) {
-                transcribe_pcmf64.insert(transcribe_pcmf64.end(), silence_samples, 0.0);
+            size_t add_samples = (batch.empty() ? 0 : silence_samples) + seg_samples;
+            if (!batch.empty() && batch.size() + add_samples > max_chunk_samples) {
+                SENSE_VOICE_LOG_INFO("%s: flushing batch of %zu segments, %zu samples (%.1fs)\n",
+                    __func__, batch_seg_count, batch.size(),
+                    (double)batch.size() / SENSE_VOICE_SAMPLE_RATE);
+                if (!transcribe_batch(batch)) return nullptr;
+                batch.clear();
+                batch_seg_count = 0;
             }
 
-            transcribe_pcmf64.insert(transcribe_pcmf64.end(),
+            if (!batch.empty()) {
+                batch.insert(batch.end(), silence_samples, 0.0);
+            }
+            batch.insert(batch.end(),
                 pcmf64.begin() + seg.t0,
                 pcmf64.begin() + seg.t1);
+            batch_seg_count++;
         }
-    }
 
-    if (transcribe_pcmf64.empty()) {
-        // VAD found nothing usable — transcribe entire audio
-        SENSE_VOICE_LOG_WARN("%s: VAD found no usable speech, falling back to full-audio path\n", __func__);
-        transcribe_pcmf64 = std::move(pcmf64);
-        progress_base = 0.0f;
+        if (!transcribe_batch(batch)) return nullptr;
+
     } else {
-        progress_base = 0.1f;
-        SENSE_VOICE_LOG_INFO("%s: concatenated %zu speech segments → %zu samples (%.1fs)\n",
-            __func__, segments.size(), transcribe_pcmf64.size(),
-            (double)transcribe_pcmf64.size() / SENSE_VOICE_SAMPLE_RATE);
+        // VAD found nothing — transcribe entire audio
+        SENSE_VOICE_LOG_WARN("%s: VAD found no speech, falling back to full-audio path\n", __func__);
+        if (!transcribe_batch(pcmf64)) return nullptr;
     }
 
-    // Single ASR call on the (possibly concatenated) audio —
-    // preserves full encoder self-attention context across segments.
-    ctx->state->result_all.clear();
-    ctx->state->segmentIDs.clear();
-    ctx->state->duration = (float)transcribe_pcmf64.size() / SENSE_VOICE_SAMPLE_RATE;
-
-    if (on_progress) on_progress(progress_base, progress_userdata);
-
-    int ret = sense_voice_full_parallel(
-        ctx, wparams,
-        transcribe_pcmf64, (int)transcribe_pcmf64.size(), 1);
-
-    if (ret != 0) {
-        fprintf(stderr, "sv: transcription failed, ret=%d\n", ret);
-        return nullptr;
-    }
-
-    auto &ids = ctx->state->ids;
-    for (size_t i = 4; i < ids.size(); i++) {
-        if (i > 4 && ids[i-1] == ids[i]) continue;
-        if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
-    }
-
-    if (on_progress) on_progress(0.95f, progress_userdata);
+    if (on_progress) on_progress(1.0f, progress_userdata);
 
     while (!text.empty() && isspace((unsigned char)text.back())) text.pop_back();
     return strdup(text.c_str());
