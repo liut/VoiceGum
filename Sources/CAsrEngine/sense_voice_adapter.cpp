@@ -96,11 +96,12 @@ char * sv_transcribe(
         wparams.progress_callback_user_data = &bridge;
     }
 
-    // ── VAD + segmented ASR ──
-    // The SenseVoice GGUF bundles a Silero VAD sub-model. Without VAD segmentation,
-    // the 50-layer encoder processes the entire audio as one sequence, causing
-    // self-attention to degrade over long distances and producing only fragments.
-    // Official FunASR pipeline segments audio via VAD before ASR for the same reason.
+    // ── VAD + concatenated ASR ──
+    // VAD locates speech regions and strips long silences, then we
+    // concatenate segments into one continuous utterance for a single
+    // ASR call. This preserves full cross-segment encoder context
+    // (unlike per-segment transcription) while still removing silence.
+
     const size_t total_samples = pcmf64.size();
 
     // VAD model expects float samples normalized to [-1, 1], but the WAV loader
@@ -112,15 +113,20 @@ char * sv_transcribe(
     }
 
     silero_vad_reset_state(*ctx->state);
-    double vad_ok = silero_vad_with_state(*ctx, *ctx->state, pcmf32, n_threads);
+    silero_vad_with_state(*ctx, *ctx->state, pcmf32, n_threads);
 
     auto segments = std::move(ctx->state->result_all);
     ctx->state->result_all.clear();
 
     std::string text;
 
+    // Determine the audio to transcribe: concatenate VAD segments with
+    // short silence gaps, or fall back to the full audio if VAD found nothing.
+    std::vector<double> transcribe_pcmf64;
+    float progress_base = 0.0f;
+
     if (!segments.empty()) {
-        if (on_progress) on_progress(0.1f, progress_userdata);
+        const size_t silence_samples = (size_t)(SENSE_VOICE_SAMPLE_RATE * 0.2); // 200ms
 
         for (size_t si = 0; si < segments.size(); si++) {
             auto &seg = segments[si];
@@ -132,56 +138,52 @@ char * sv_transcribe(
                 continue;
             }
 
-            // Extract segment from original (unnormalized) audio for ASR
-            std::vector<double> seg_pcmf64(pcmf64.begin() + seg.t0, pcmf64.begin() + seg.t1);
-
-            ctx->state->result_all.clear();
-            ctx->state->segmentIDs.clear();
-            ctx->state->duration = (float)seg_samples / SENSE_VOICE_SAMPLE_RATE;
-
-            int ret = sense_voice_full_parallel(
-                ctx, wparams,
-                seg_pcmf64, (int)seg_samples, 1);
-
-            if (ret != 0) {
-                SENSE_VOICE_LOG_ERROR("%s: segment %zu transcription failed, ret=%d\n",
-                    __func__, si, ret);
-                continue;
+            if (!transcribe_pcmf64.empty()) {
+                transcribe_pcmf64.insert(transcribe_pcmf64.end(), silence_samples, 0.0);
             }
 
-            auto &ids = ctx->state->ids;
-            for (size_t i = 4; i < ids.size(); i++) {
-                if (i > 4 && ids[i-1] == ids[i]) continue;
-                if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
-            }
-
-            if (on_progress) {
-                float seg_progress = 0.1f + 0.85f * ((float)seg.t1 / total_samples);
-                on_progress(fminf(0.95f, seg_progress), progress_userdata);
-            }
-        }
-    } else {
-        // Fallback: VAD found no speech — transcribe entire audio
-        SENSE_VOICE_LOG_WARN("%s: VAD found no speech, falling back to full-audio path\n", __func__);
-
-        ctx->state->result_all.clear();
-        ctx->state->segmentIDs.clear();
-        ctx->state->duration = (float)total_samples / sample_rate;
-
-        int ret = sense_voice_full_parallel(ctx, wparams, pcmf64, (int)total_samples, 1);
-        if (ret != 0) {
-            fprintf(stderr, "sv: transcription failed, ret=%d\n", ret);
-            return nullptr;
-        }
-
-        auto &ids = ctx->state->ids;
-        for (size_t i = 4; i < ids.size(); i++) {
-            if (i > 4 && ids[i-1] == ids[i]) continue;
-            if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
+            transcribe_pcmf64.insert(transcribe_pcmf64.end(),
+                pcmf64.begin() + seg.t0,
+                pcmf64.begin() + seg.t1);
         }
     }
 
-    if (on_progress) on_progress(1.0f, progress_userdata);
+    if (transcribe_pcmf64.empty()) {
+        // VAD found nothing usable — transcribe entire audio
+        SENSE_VOICE_LOG_WARN("%s: VAD found no usable speech, falling back to full-audio path\n", __func__);
+        transcribe_pcmf64 = std::move(pcmf64);
+        progress_base = 0.0f;
+    } else {
+        progress_base = 0.1f;
+        SENSE_VOICE_LOG_INFO("%s: concatenated %zu speech segments → %zu samples (%.1fs)\n",
+            __func__, segments.size(), transcribe_pcmf64.size(),
+            (double)transcribe_pcmf64.size() / SENSE_VOICE_SAMPLE_RATE);
+    }
+
+    // Single ASR call on the (possibly concatenated) audio —
+    // preserves full encoder self-attention context across segments.
+    ctx->state->result_all.clear();
+    ctx->state->segmentIDs.clear();
+    ctx->state->duration = (float)transcribe_pcmf64.size() / SENSE_VOICE_SAMPLE_RATE;
+
+    if (on_progress) on_progress(progress_base, progress_userdata);
+
+    int ret = sense_voice_full_parallel(
+        ctx, wparams,
+        transcribe_pcmf64, (int)transcribe_pcmf64.size(), 1);
+
+    if (ret != 0) {
+        fprintf(stderr, "sv: transcription failed, ret=%d\n", ret);
+        return nullptr;
+    }
+
+    auto &ids = ctx->state->ids;
+    for (size_t i = 4; i < ids.size(); i++) {
+        if (i > 4 && ids[i-1] == ids[i]) continue;
+        if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
+    }
+
+    if (on_progress) on_progress(0.95f, progress_userdata);
 
     while (!text.empty() && isspace((unsigned char)text.back())) text.pop_back();
     return strdup(text.c_str());
