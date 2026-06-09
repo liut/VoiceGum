@@ -31,7 +31,8 @@ run-app: bundle
 
 sign: bundle
 	@if [ -z "$(DEVELOPER_ID)" ]; then \
-		echo "Warning: Developer ID not found. Code signing skipped."; \
+		echo "No Developer ID cert, using ad-hoc sign for local use"; \
+		codesign --sign - --force --options runtime $(RELEASE_APP_PATH); \
 	else \
 		codesign --force --sign "$(DEVELOPER_ID)" --options runtime $(RELEASE_APP_PATH); \
 	fi
