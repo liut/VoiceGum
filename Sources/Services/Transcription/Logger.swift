@@ -20,7 +20,7 @@ public actor Logger {
 
         let msg = "[\(dateFormatter.string(from: Date()))] Logger started\n"
         try? msg.data(using: .utf8)?.write(to: logURL)
-        print("[VoiceGum] Logger started to \(logURL.path)")
+        fputs("[VoiceGum] Logger started to \(logURL.path)\n", stderr)
     }
 
     public func info(_ message: String) {
@@ -53,7 +53,7 @@ public actor Logger {
                 try? line.data(using: .utf8)?.write(to: logURL)
             }
         }
-        print("[\(level)] \(message)")
+        fputs("[\(level)] \(message)\n", stderr)
     }
 
     public func getRecentLogs(count: Int = 100) -> String {

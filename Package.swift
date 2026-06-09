@@ -10,9 +10,18 @@ let package = Package(
         .executable(
             name: "VoiceGum",
             targets: ["VoiceGum"]
-        )
+        ),
+        .executable(
+            name: "VoiceGumCLI",
+            targets: ["VoiceGumCLI"]
+        ),
     ],
     targets: [
+        .executableTarget(
+            name: "VoiceGumCLI",
+            dependencies: ["VoiceGumServices"],
+            path: "Sources/CLI"
+        ),
         .executableTarget(
             name: "VoiceGum",
             dependencies: ["VoiceGumCore", "VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey"],
