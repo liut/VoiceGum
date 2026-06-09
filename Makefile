@@ -5,7 +5,7 @@ VERSION = 1.0.0
 BUILD_PATH = .build/release
 RELEASE_APP_PATH = build/Release/VoiceGum.app
 
-.PHONY: all build run run-app install clean sign pkg bundle
+.PHONY: all build run run-cli run-app install install-cli clean sign pkg bundle
 
 all: build
 
@@ -14,6 +14,12 @@ build:
 
 run:
 	./$(BUILD_PATH)/VoiceGum
+
+run-cli:
+	./$(BUILD_PATH)/VoiceGumCLI
+
+install-cli: build
+	cp $(BUILD_PATH)/VoiceGumCLI /usr/local/bin/voicegum-cli
 
 bundle: build
 	rm -rf $(RELEASE_APP_PATH)
