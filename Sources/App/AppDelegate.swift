@@ -33,12 +33,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateNow
         }
 
-        // Transcription is in progress — defer termination until it finishes,
-        // then free the model. If we exit while the C++ transcription thread
-        // holds ggml Metal resources, the static destructors will crash.
+        // Transcription is in progress — wait briefly for it to finish so
+        // we can safely free the model before exit. If it doesn't finish
+        // within the timeout, skip sv_free and let _exit() reclaim everything;
+        // the OS recovers GPU resources just fine and _exit bypasses static
+        // destructors, so there is no crash risk.
         Task { @MainActor in
-            await GGMLTranscriptionService.waitForTranscriptionCompletion()
-            GGMLTranscriptionService.invalidateActiveModel()
+            let completed = await GGMLTranscriptionService.waitForTranscriptionCompletion(timeout: 5)
+            if completed {
+                GGMLTranscriptionService.invalidateActiveModel()
+            }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

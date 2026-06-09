@@ -32,19 +32,20 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         activeInstance = nil
     }
 
-    /// Poll until the active transcription finishes, then return.
-    /// Called during app termination when a transcription is in flight —
-    /// we must wait for the C++ thread to release ggml Metal resources
-    /// before freeing the model, otherwise the static destructors crash.
-    public static func waitForTranscriptionCompletion() async {
-        guard let instance = activeInstance else { return }
-        // Busy-wait with yielding — the transcription runs on a
-        // DispatchQueue.global() thread and can't be truly interrupted,
-        // but cancelling the Swift Task causes the loop to exit at the
-        // next checkCancellation point.
+    /// Poll until the active transcription finishes, or the timeout expires.
+    /// Returns `true` if transcription completed, `false` on timeout.
+    /// Called during app termination — a bounded wait prevents the app from
+    /// appearing frozen when a long transcription is in flight.
+    public static func waitForTranscriptionCompletion(timeout: TimeInterval) async -> Bool {
+        guard let instance = activeInstance else { return true }
+        let deadline = ContinuousClock.now + .seconds(timeout)
         while instance.syncIsTranscribing {
+            if ContinuousClock.now > deadline {
+                return false
+            }
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
         }
+        return true
     }
 
     /// Thread-safe synchronous check, usable from async contexts.
@@ -136,22 +137,22 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         cancelUnloadTimer()
         stateLock.lock()
         let isActive = isTranscribing
+        let h: UnsafeMutableRawPointer?
+        if !isActive {
+            h = svHandle
+            svHandle = nil
+        } else {
+            h = nil
+        }
         stateLock.unlock()
-        // Guard against concurrent transcription — freeing the model
-        // while C++ code holds a pointer causes a use-after-free crash.
-        guard !isActive, let h = svHandle else { return }
+        guard let h else { return }
         sv_free(h)
-        self.svHandle = nil
     }
 
     public func scheduleUnload(after seconds: TimeInterval = 5) {
         cancelUnloadTimer()
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.stateLock.lock()
-            defer { self.stateLock.unlock() }
-            if self.isTranscribing { return }
-            self.unload()
+            self?.unload()
         }
         unloadWorkItem = workItem
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: workItem)
