@@ -1,11 +1,12 @@
 PRODUCT_NAME = VoiceGum
 BUNDLE_ID = com.voicegum.app
-DEVELOPER_ID = $$(security find-identity -v -s "Developer ID Application" 2>/dev/null | grep -oE '[A-F0-9]{40}' | head -1)
+DEVELOPER_ID = $$(security find-identity -v -s "Developer ID Application" 2>/dev/null | grep "Developer ID Application" | grep -oE '[A-F0-9]{40}' | head -1)
+NOTARY_PROFILE = NotaryProfile
 VERSION = 1.0.0
 BUILD_PATH = .build/release
 RELEASE_APP_PATH = build/Release/VoiceGum.app
 
-.PHONY: all build run run-cli run-app install install-cli clean sign pkg bundle
+.PHONY: all build run run-cli run-app install install-cli clean sign notarize pkg bundle
 
 all: build
 
@@ -43,7 +44,19 @@ sign: bundle
 		codesign --force --sign "$(DEVELOPER_ID)" --options runtime $(RELEASE_APP_PATH); \
 	fi
 
-install: sign
+notarize: sign
+	@if ! xcrun notarytool history --keychain-profile "$(NOTARY_PROFILE)" >/dev/null 2>&1; then \
+		echo "Notary profile not found. Set it up first:"; \
+		echo "  xcrun notarytool store-credentials \"$(NOTARY_PROFILE)\""; \
+		echo "    --apple-id <your-apple-id> --team-id <team-id>"; \
+		exit 1; \
+	fi
+	ditto -c -k --keepParent $(RELEASE_APP_PATH) $(BUILD_PATH)/VoiceGum.zip
+	xcrun notarytool submit $(BUILD_PATH)/VoiceGum.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple $(RELEASE_APP_PATH)
+	@echo "Done. Verify with: spctl -a -vvv $(RELEASE_APP_PATH)"
+
+install: notarize
 	rm -rf /Applications/VoiceGum.app
 	cp -r $(RELEASE_APP_PATH) /Applications/
 
