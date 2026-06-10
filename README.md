@@ -58,6 +58,7 @@ See `voicegum-cli --help` for full usage. Install with `make install-cli`.
 - macOS 14+
 - Xcode 16+ / Swift 6 toolchain
 - Apple Silicon (M1+) recommended for local models
+- Apple Developer Program ($99/year) required for distribution signing and notarization. Local development works without it (`make run-app` uses ad-hoc signing)
 
 ### Commands
 
