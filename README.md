@@ -1,14 +1,10 @@
 # VoiceGum
 
-A minimal macOS application that transcribes audio files to text using configurable ASR engines, with optional LLM-powered refinement and summarization.
+A minimal macOS application that transcribes audio files to text using configurable ASR engines, with optional LLM-powered refinement and summarization. Also includes a CLI for pipe-based transcription.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 ![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 ![SPM](https://img.shields.io/badge/Build-SPM-green)
-
-## Overview
-
-VoiceGum provides a fast, distraction-free way to convert speech in audio files into readable text. It supports both online APIs and local offline models, with an optional LLM post-processing pipeline for text refinement and summarization.
 
 ## Features
 
@@ -41,39 +37,20 @@ Local models are downloaded on demand from **HuggingFace** (primary) and **Model
 - Persistent transcription history with raw text, refined text, and summaries
 - Per-entry metadata: source file, engine used, language, duration
 
-## Architecture
+### CLI
 
-```
-VoiceGum/
-├── Sources/
-│   ├── App/              # NSApplication entry point, AppDelegate
-│   ├── Core/             # SwiftUI views, ViewModels, state machine
-│   ├── Services/         # Transcription, LLM client, history, audio
-│   │   ├── Audio/        # AudioFileValidator, AudioConverter
-│   │   ├── History/      # HistoryManager
-│   │   ├── LLM/          # LLMClient
-│   │   └── Transcription/# ASR services, model download, logger
-│   ├── Preferences/      # UserDefaults wrapper
-│   ├── Keychain/         # Keychain access for ASR API key
-│   ├── FnKey/            # Fn key detector
-│   ├── CAsrEngine/       # SenseVoice ASR engine (ggml + Metal, C++17)
-│   └── CZlib/            # Gzip helper for HTTP compression
-├── Resources/
-│   ├── Info.plist        # App bundle configuration (ATS, permissions)
-│   ├── AppIcon.icns      # App icon
-│   ├── Assets.xcassets   # Asset catalog
-│   └── VoiceText.png
-├── Package.swift         # SPM manifest
-└── Makefile              # build / run-app / install / clean
+```bash
+# Transcribe a file
+voicegum-cli audio.mp3
+
+# Pipe audio from stdin
+cat audio.mp3 | voicegum-cli
+
+# Specify language and output file
+voicegum-cli audio.mp3 -l zh -o out.txt
 ```
 
-### Key Design Patterns
-
-- **TranscriptionService Protocol**: Unified interface for all ASR backends (`GGMLTranscriptionService`, `OnlineAPITranscription`, `VolcanoEngineASR`)
-- **TranscriptionState Enum**: State machine driving the UI (`idle → validating → queued → preparing → transcribing → refining → completed | failed | cancelled`)
-- **Actor-based LLMClient**: Thread-safe singleton with provider-specific request builders (OpenAI, Anthropic, Ollama)
-- **Actor-based ModelDownloadManager**: Resume-capable downloads with progress callbacks
-- **Background URLSession**: LLM calls run off the main queue to avoid "process not responding" during long requests
+See `voicegum-cli --help` for full usage. Install with `make install-cli`.
 
 ## Build & Run
 
@@ -85,20 +62,13 @@ VoiceGum/
 ### Commands
 
 ```bash
-# Build release binary
-make build
-
-# Run directly from build output
-make run
-
-# Build and launch as signed .app bundle
-make run-app
-
-# Install to /Applications
-make install
-
-# Clean build artifacts
-make clean
+make build          # Build release binaries (GUI + CLI)
+make run            # Run GUI from build output
+make run-app        # Build, bundle, sign, and launch as .app
+make run-cli        # Run CLI from build output
+make install        # Install GUI app to /Applications
+make install-cli    # Install CLI to /usr/local/bin
+make clean          # Clean build artifacts
 ```
 
 ### Manual Build (SPM)
@@ -107,7 +77,7 @@ make clean
 swift build -c release
 ```
 
-The executable can be found at `.build/release/VoiceGum`.
+Binaries are at `.build/release/VoiceGum` and `.build/release/VoiceGumCLI`.
 
 ## Configuration
 

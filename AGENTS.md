@@ -5,6 +5,8 @@
 ```bash
 swift build -c release
 make run-app                     # build + bundle .app + ad-hoc sign + open
+make run-cli                     # build + run CLI
+make install-cli                 # cp VoiceGumCLI → /usr/local/bin/voicegum-cli
 make clean                       # rm -rf .build build
 ```
 
@@ -12,22 +14,56 @@ make clean                       # rm -rf .build build
 - **C++ compilation**: `CAsrEngine` uses `-fno-modules` to bypass Clang module errors from Xcode 26.5 SDK headers. Don't remove it.
 - **Pre-built static libs**: `Sources/CAsrEngine/libs/libggml*.a` are Apple Silicon builds. Rebuild from llama.cpp if adding a new backend.
 
-## Module Graph
+## Architecture
 
 ```
+VoiceGum/
+├── Sources/
+│   ├── App/              # NSApplication entry point, AppDelegate
+│   ├── CLI/              # voicegum-cli (VoiceGumServices dependency only)
+│   ├── Core/             # SwiftUI views, ViewModels, state machine
+│   ├── Services/         # Transcription, LLM client, history, audio
+│   │   ├── Audio/        # AudioFileValidator, AudioConverter
+│   │   ├── History/      # HistoryManager
+│   │   ├── LLM/          # LLMClient
+│   │   └── Transcription/# ASR services, model download, logger
+│   ├── Preferences/      # UserDefaults wrapper
+│   ├── Keychain/         # Keychain access for ASR API key
+│   ├── FnKey/            # Fn key detector
+│   ├── CAsrEngine/       # SenseVoice ASR engine (ggml + Metal, C++17)
+│   └── CZlib/            # Gzip helper for HTTP compression
+├── Resources/            # GUI bundle resources (Info.plist, icons, assets)
+├── Package.swift         # SPM manifest (VoiceGum + VoiceGumCLI products)
+└── Makefile              # build / run-app / run-cli / install / clean
+```
+
+### Module Graph
+
+```
+VoiceGumCLI (Sources/CLI)
+  └─ VoiceGumServices (Sources/Services)
+       ├─ VoiceGumPreferences
+       ├─ VoiceGumKeychain
+       ├─ CZlib (C, links libz)
+       └─ CAsrEngine (C++17, links libggml*.a + Metal)
+
 VoiceGum (Sources/App)
   └─ VoiceGumCore (Sources/Core)
-       ├─ VoiceGumServices (Sources/Services)
-       │    ├─ VoiceGumPreferences
-       │    ├─ VoiceGumKeychain
-       │    ├─ CZlib (C, links libz)
-       │    └─ CAsrEngine (C++17, links libggml*.a + Metal)
+       ├─ VoiceGumServices
        ├─ VoiceGumPreferences
        ├─ VoiceGumKeychain
        └─ VoiceGumFnKey
 ```
 
-`VoiceGumPreferences` has zero dependencies — no Services or Core imports.
+`VoiceGumCLI` depends only on `VoiceGumServices` — no App/Core/UI linkage. `VoiceGumPreferences` has zero dependencies.
+
+### Key Design Patterns
+
+- **TranscriptionService Protocol**: Unified interface for all ASR backends (`GGMLTranscriptionService`, `OnlineAPITranscription`, `VolcanoEngineASR`)
+- **TranscriptionState Enum**: State machine driving the UI (`idle → validating → queued → preparing → transcribing → refining → completed | failed | cancelled`)
+- **Actor-based LLMClient**: Thread-safe singleton with provider-specific request builders (OpenAI, Anthropic, Ollama)
+- **Actor-based ModelDownloadManager**: Resume-capable downloads with progress callbacks
+- **Background URLSession**: LLM calls run off the main queue to avoid "process not responding" during long requests
 
 ## Conventions
 
@@ -38,6 +74,8 @@ VoiceGum (Sources/App)
 - **One concept per file**. `SettingsView.swift` is long but intentional.
 
 ## Adding Features
+
+**New Executable Target**: add product + target in `Package.swift`, choose minimal dependency set (see `VoiceGumCLI` for example: only `VoiceGumServices`).
 
 **New LLM Provider**: add case to `LLMProvider` → add `xxxChat()` method → update `send()` switch → add to `SettingsView.providers` → add `defaultBaseURL`/`defaultModel` → add to `validProviders`.
 
@@ -53,6 +91,8 @@ VoiceGum (Sources/App)
 - **ASR API key**: Keychain. **LLM API keys**: UserDefaults.
 - **`CAsrEngine` uses `unsafeFlags`** — SPM can't express C++17 + header paths natively. Expected.
 - **`Sources/UI/`** — empty directories, no SPM target. Dead code.
+- **`_exit(0)` in AppDelegate + CLI**: Bypasses ggml Metal static destructor crash. Don't replace with normal `exit()`.
+- **`Logger` writes to stderr**: Both GUI console and CLI stderr — intentional, keeps stdout clean for CLI pipe output.
 
 ## Data Locations
 
