@@ -31,6 +31,36 @@ char * sv_transcribe(
     asr_progress_fn on_progress,
     void * progress_userdata);
 
+// ── Per-segment transcription ──
+
+typedef struct {
+    char * text;      // transcribed text for this segment (malloc'd)
+    float  t0_ms;     // segment start time in milliseconds
+    float  t1_ms;     // segment end time in milliseconds
+} sv_segment;
+
+typedef struct {
+    sv_segment * segments;  // array of segments
+    int          count;     // number of segments
+    char       * language;  // language used for transcription
+} sv_result;
+
+// Transcribe WAV file with per-segment timing (blocking).
+// Returns struct with malloc'd segments and language; free with sv_free_result().
+// When segment count ≤ 10: each segment is transcribed individually.
+// When segment count > 10: segments are batched into ~30s windows and text is
+// distributed proportionally by segment duration.
+sv_result sv_transcribe_segments(
+    void * handle,
+    const char * wav_path,
+    const char * language,
+    int n_threads,
+    asr_progress_fn on_progress,
+    void * progress_userdata);
+
+// Free all memory allocated by sv_transcribe_segments()
+void sv_free_result(sv_result result);
+
 #ifdef __cplusplus
 }
 #endif

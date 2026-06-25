@@ -11,12 +11,15 @@ public struct SettingsView: View {
 
     public var body: some View {
         TabView(selection: $selectedTab) {
-            ASRSettingsTab()
-                .tabItem { Label("ASR", systemImage: "waveform") }
+            GeneralSettingsTab()
+                .tabItem { Label(String(localized: "通用"), systemImage: "gearshape") }
                 .tag(0)
-            LLMSettingsTab()
-                .tabItem { Label("LLM", systemImage: "brain") }
+            ASRSettingsTab()
+                .tabItem { Label(String(localized: "转写"), systemImage: "waveform") }
                 .tag(1)
+            LLMSettingsTab()
+                .tabItem { Label(String(localized: "润色"), systemImage: "brain") }
+                .tag(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(16)
@@ -53,35 +56,20 @@ struct ASRSettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Current engine status
-                HStack(spacing: 8) {
-                    Image(systemName: providerType == "online" ? "cloud" : "internaldrive")
-                        .foregroundColor(.secondary)
-                    Text(providerType == "online" ? String(localized: "在线 API") : String(localized: "本地模型"))
-                        .font(.subheadline).fontWeight(.medium)
-                    if providerType == "local", let m = allModels.first(where: { $0.id == selectedModel }),
-                       let family = modelFamilies.first(where: { $0.models.contains(where: { $0.id == selectedModel }) }) {
-                        Text("·").foregroundColor(.secondary)
-                        Text("\(family.name) \(m.displayName)").font(.subheadline).foregroundColor(.secondary)
-                    }
-                    Spacer()
+                // MARK: 模式选择
+                Picker(String(localized: "模式"), selection: $providerType) {
+                    Text(String(localized: "在线 API")).tag("online")
+                    Text(String(localized: "本地模型")).tag("local")
                 }
-                .padding(.horizontal, 4)
-
-                HStack {
-                    Picker(String(localized: "模式"), selection: $providerType) {
-                        Text(String(localized: "在线 API")).tag("online")
-                        Text(String(localized: "本地模型")).tag("local")
-                    }
-                    .pickerStyle(.segmented).labelsHidden()
-                    .onChange(of: providerType) {
-                        AppPreferences.shared.asrProvider = providerType
-                        if providerType == "online" { selectedModel = onlineModels[0].0 }
-                        else if ds.downloadedModels.isEmpty { selectedModel = "sense-voice-fp16" }
-                        AppPreferences.shared.asrModel = selectedModel
-                    }
+                .pickerStyle(.segmented).labelsHidden()
+                .onChange(of: providerType) {
+                    AppPreferences.shared.asrProvider = providerType
+                    if providerType == "online" { selectedModel = onlineModels[0].0 }
+                    else if ds.downloadedModels.isEmpty { selectedModel = "sense-voice-fp16" }
+                    AppPreferences.shared.asrModel = selectedModel
                 }
 
+                // MARK: 在线服务配置
                 if providerType == "online" {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(String(localized: "在线服务商")).font(.headline)
@@ -96,7 +84,6 @@ struct ASRSettingsTab: View {
 
                         if onlineService == "openai" {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(String(localized: "OpenAI 配置")).font(.subheadline).foregroundColor(.secondary)
                                 TextField("API URL", text: $apiURL)
                                     .textFieldStyle(.roundedBorder)
                                     .onChange(of: apiURL) { AppPreferences.shared.asrAPIURL = apiURL }
@@ -113,7 +100,6 @@ struct ASRSettingsTab: View {
 
                         if onlineService == "volcengine" {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(String(localized: "火山引擎配置")).font(.subheadline).foregroundColor(.secondary)
                                 TextField("APP ID", text: $volcAppId)
                                     .textFieldStyle(.roundedBorder)
                                     .onChange(of: volcAppId) { AppPreferences.shared.volcAppId = volcAppId }
@@ -130,7 +116,12 @@ struct ASRSettingsTab: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
                 }
 
+                // MARK: 本地模型选择
                 if providerType == "local" {
+                    Text(String(localized: "模型选择")).font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+
                     ForEach(modelFamilies) { family in
                         ModelCard(
                             family: family,
@@ -170,6 +161,69 @@ struct ASRSettingsTab: View {
 
     private func loadAPIKey() {
         Task { if let key = try? await KeychainManager.shared.readASRAPIKey() { apiKey = key } }
+    }
+}
+
+// MARK: - General Settings Tab
+
+struct GeneralSettingsTab: View {
+    @State private var selectedLanguage = AppPreferences.shared.language
+    @State private var subtitleExport = AppPreferences.shared.subtitleExportEnabled
+    @State private var autoSaveHistory = AppPreferences.shared.autoSaveHistory
+
+    let languageOptions: [(String, String)] = [
+        ("zh-CN", "中文普通话"),
+        ("zh-TW", "台湾国语"),
+        ("en", "English"),
+        ("ja", "日本語"),
+        ("ko", "한국어"),
+        ("yue", "粤语"),
+        ("auto", String(localized: "自动检测")),
+    ]
+
+    var isLocal: Bool { AppPreferences.shared.asrProvider != "online" }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker(String(localized: "识别语言"), selection: $selectedLanguage) {
+                        ForEach(languageOptions, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                    .onChange(of: selectedLanguage) {
+                        AppPreferences.shared.language = selectedLanguage
+                    }
+
+                    if isLocal {
+                        Toggle(isOn: $subtitleExport) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "自动生成字幕"))
+                                Text(String(localized: "转写完成后自动生成 SRT 字幕文件"))
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                        .onChange(of: subtitleExport) { AppPreferences.shared.subtitleExportEnabled = $0 }
+                    }
+
+                    Toggle(isOn: $autoSaveHistory) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "自动保存历史"))
+                            Text(String(localized: "转写完成后自动保存到历史记录"))
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .onChange(of: autoSaveHistory) { AppPreferences.shared.autoSaveHistory = $0 }
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
+            }
+            .padding(16)
+        }
+        .onAppear {
+            selectedLanguage = AppPreferences.shared.language
+            subtitleExport = AppPreferences.shared.subtitleExportEnabled
+            autoSaveHistory = AppPreferences.shared.autoSaveHistory
+        }
     }
 }
 

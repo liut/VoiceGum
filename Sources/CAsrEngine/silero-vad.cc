@@ -214,8 +214,8 @@ bool silero_vad_encode_internal(sense_voice_context &ctx,
 // VAD_THRESHOLD: speech probability threshold (Silero default 0.5; we use 0.3
 //   for higher sensitivity on quiet/trailing speech).
 // VAD_MIN_SPEECH_MS: minimum trailing-segment duration to avoid noise tails.
-// VAD_MIN_SILENCE_MS: minimum silence to end a segment. 300ms avoids splitting
-//   on brief intra-sentence pauses (breath, hesitation).
+// VAD_MIN_SILENCE_MS: min silence to end a segment. 150ms catches sentence
+//   boundaries in Chinese (100-200ms) while filtering breath/hesitation (<100ms).
 // VAD_SPEECH_PAD_MS: padding added on both sides of each detected segment.
 //   200ms covers VAD onset detection latency and prevents phoneme truncation
 //   at boundaries (observed as dropped initial words and mid-word splits).
@@ -224,7 +224,7 @@ bool silero_vad_encode_internal(sense_voice_context &ctx,
 //   800ms covers the cold-start detection latency so initial words aren't lost.
 #define VAD_THRESHOLD       0.3f
 #define VAD_MIN_SPEECH_MS   250
-#define VAD_MIN_SILENCE_MS  300
+#define VAD_MIN_SILENCE_MS  150
 #define VAD_SPEECH_PAD_MS   200
 #define VAD_FIRST_SEGMENT_PAD_MS 800
 

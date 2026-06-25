@@ -28,7 +28,8 @@ public actor HistoryManager {
         entries[idx] = HistoryEntry(
             id: e.id, sourceFileName: e.sourceFileName, timestamp: e.timestamp,
             engineDescription: e.engineDescription, language: e.language, duration: e.duration,
-            rawText: e.rawText, refinedText: refinedText, summaryText: e.summaryText
+            rawText: e.rawText, refinedText: refinedText, summaryText: e.summaryText,
+            segments: e.segments
         )
         persist()
     }
@@ -39,7 +40,8 @@ public actor HistoryManager {
         entries[idx] = HistoryEntry(
             id: e.id, sourceFileName: e.sourceFileName, timestamp: e.timestamp,
             engineDescription: e.engineDescription, language: e.language, duration: e.duration,
-            rawText: e.rawText, refinedText: e.refinedText, summaryText: summaryText
+            rawText: e.rawText, refinedText: e.refinedText, summaryText: summaryText,
+            segments: e.segments
         )
         persist()
     }

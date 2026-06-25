@@ -14,6 +14,8 @@ public final class AppPreferences: @unchecked Sendable {
         static let volcAppId = "voicegum.volcAppId"
         static let volcResourceId = "voicegum.volcResourceId"
         static let volcAccessToken = "voicegum.volcAccessToken"
+        static let subtitleExportEnabled = "voicegum.asr.subtitleExportEnabled"
+        static let autoSaveHistory = "voicegum.asr.autoSaveHistory"
         static let llmProvider = "voicegum.llmProvider"
     }
 
@@ -32,7 +34,7 @@ public final class AppPreferences: @unchecked Sendable {
     // MARK: - ASR
 
     public var language: String {
-        get { defaults.string(forKey: Keys.language) ?? "zh-CN" }
+        get { defaults.string(forKey: Keys.language) ?? "auto" }
         set { defaults.set(newValue, forKey: Keys.language) }
     }
 
@@ -69,6 +71,16 @@ public final class AppPreferences: @unchecked Sendable {
     public var volcAccessToken: String {
         get { defaults.string(forKey: Keys.volcAccessToken) ?? "" }
         set { defaults.set(newValue, forKey: Keys.volcAccessToken) }
+    }
+
+    public var subtitleExportEnabled: Bool {
+        get { defaults.object(forKey: Keys.subtitleExportEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.subtitleExportEnabled) }
+    }
+
+    public var autoSaveHistory: Bool {
+        get { defaults.object(forKey: Keys.autoSaveHistory) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.autoSaveHistory) }
     }
 
     // MARK: - LLM (global)

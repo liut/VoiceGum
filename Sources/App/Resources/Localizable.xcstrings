@@ -296,6 +296,134 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop audio file here or click to select" } },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声ファイルをここにドロップまたはクリックして選択" } }
       }
+    },
+    "转写" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转写" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉寫" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "ASR" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし" } }
+      }
+    },
+    "润色" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "润色" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "潤色" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "LLM" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集" } }
+      }
+    },
+    "通用" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "一般" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "一般" } }
+      }
+    },
+    "识别语言" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "识别语言" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "識別語言" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "認識言語" } }
+      }
+    },
+    "自动检测" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动检测" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動檢測" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto Detect" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自動検出" } }
+      }
+    },
+    "自动生成字幕" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动生成字幕" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動生成字幕" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-generate Subtitles" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "字幕を自動生成" } }
+      }
+    },
+    "转写完成后自动生成 SRT 字幕文件" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转写完成后自动生成 SRT 字幕文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉寫完成後自動生成 SRT 字幕檔案" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-generate SRT subtitle file after transcription" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし完了後にSRT字幕を自動生成" } }
+      }
+    },
+    "自动保存历史" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动保存历史" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動儲存歷史" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-save History" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "履歴を自動保存" } }
+      }
+    },
+    "转写完成后自动保存到历史记录" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转写完成后自动保存到历史记录" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉寫完成後自動儲存到歷史記錄" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-save to history after transcription" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし完了後に履歴へ自動保存" } }
+      }
+    },
+    "模型选择" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型选择" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "模型選擇" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Model Selection" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル選択" } }
+      }
+    },
+    "任务提示词" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务提示词" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "任務提示詞" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task Prompts" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクプロンプト" } }
+      }
+    },
+    "自动润色" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动润色" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動潤色" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-refine" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自動編集" } }
+      }
+    },
+    "Refine — 润色转写文字" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Refine — 润色转写文字" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Refine — 潤色轉寫文字" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refine — Polish transcription text" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Refine — 文字起こしテキストを編集" } }
+      }
+    },
+    "自动摘要" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动摘要" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動摘要" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-summarize" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自動要約" } }
+      }
+    },
+    "Summary — 生成全文摘要" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Summary — 生成全文摘要" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Summary — 生成全文摘要" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Summary — Generate full-text summary" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Summary — 全文要約を生成" } }
+      }
+    },
+    "请输入模型名称" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请输入模型名称" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請輸入模型名稱" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please enter model name" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル名を入力してください" } }
+      }
     }
   },
   "version" : "1.0"

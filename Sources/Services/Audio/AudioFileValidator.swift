@@ -4,7 +4,7 @@ import AVFoundation
 public enum AudioFileValidator {
     public static let supportedExtensions = ["wav", "mp3", "m4a", "flac", "aac", "alac", "aiff", "caf", "mp4", "mov", "m4v"]
     public static let maxWavFileSize: Int64 = 200_000_000   // 200 MB
-    public static let maxOtherFileSize: Int64 = 60_000_000  // 60 MB
+    public static let maxOtherFileSize: Int64 = 600_000_000  // 600 MB
 
     public static func maxFileSize(for url: URL) -> Int64 {
         url.pathExtension.lowercased() == "wav" ? maxWavFileSize : maxOtherFileSize

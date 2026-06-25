@@ -101,7 +101,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
             }
         }
 
-        let text: String = try await withCheckedThrowingContinuation { continuation in
+        let transcriptionResult: TranscriptionResult = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global().async {
                 guard let h = self.svHandle else {
                     continuation.resume(throwing: TranscriptionError.transcriptionFailed("模型未加载"))
@@ -117,20 +117,40 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
                     }
                 }()
 
-                let result = sv_transcribe(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
+                // Try segmented transcription first
+                let segResult = sv_transcribe_segments(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
 
-                guard let r = result else {
-                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("SenseVoice 转写返回空"))
-                    return
+                if segResult.count > 0, let segsPtr = segResult.segments {
+                    var segments: [SubtitleSegment] = []
+                    var textParts: [String] = []
+                    for i in 0..<Int(segResult.count) {
+                        let cSeg = segsPtr[i]
+                        let text = cSeg.text.map { String(cString: $0) } ?? ""
+                        segments.append(SubtitleSegment(text: text, startMs: cSeg.t0_ms, endMs: cSeg.t1_ms))
+                        textParts.append(text)
+                    }
+                    let combinedText = textParts.joined(separator: " ")
+                    let detectedLanguage = segResult.language.map { String(cString: $0) } ?? language
+                    sv_free_result(segResult)
+                    continuation.resume(returning: TranscriptionResult(text: combinedText, language: detectedLanguage, segments: segments))
+                } else {
+                    // No segments — free result and fall back to text-only transcription
+                    sv_free_result(segResult)
+
+                    let result = sv_transcribe(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
+                    guard let r = result else {
+                        continuation.resume(throwing: TranscriptionError.transcriptionFailed("SenseVoice 转写返回空"))
+                        return
+                    }
+                    let t = String(cString: r)
+                    free(r)
+                    continuation.resume(returning: TranscriptionResult(text: t, language: language))
                 }
-                let t = String(cString: r)
-                free(r)
-                continuation.resume(returning: t)
             }
         }
 
-        await Logger.shared.info("SenseVoice 完成: \(text.prefix(100))...")
-        return TranscriptionResult(text: text, timestamps: nil, language: language, confidence: nil)
+        await Logger.shared.info("SenseVoice 完成: \(transcriptionResult.text)")
+        return transcriptionResult
     }
 
     public func unload() {

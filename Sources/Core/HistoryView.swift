@@ -138,6 +138,12 @@ private struct HistoryDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer()
+                Button(action: { TranscriptionViewModel.exportSubtitles(entry: entry) }) {
+                    Label(String(localized: "导出字幕"), systemImage: "arrow.up.doc")
+                }
+                .buttonStyle(.bordered)
+                .disabled(entry.segments == nil)
+                .help(entry.segments == nil ? String(localized: "此记录不含时序数据，无法生成字幕") : "")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
