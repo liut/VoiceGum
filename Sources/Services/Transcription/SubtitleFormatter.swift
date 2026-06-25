@@ -12,6 +12,39 @@ public enum SubtitleFormatter {
         return formatSRT(split)
     }
 
+    /// Generate bilingual SRT: original text + translated text in each subtitle block.
+    public static func toSRTBilingual(original: [SubtitleSegment], translated: [SubtitleSegment]) -> String {
+        guard !original.isEmpty else { return "" }
+        guard original.count == translated.count else {
+            return toSRT(original) + "\n\n" + toSRT(translated)
+        }
+
+        let mergedOrig = mergeShortSegments(original)
+        let mergedTrans = mergeShortSegments(translated)
+        let splitOrig = smartSplit(mergedOrig)
+        let splitTrans = smartSplit(mergedTrans)
+
+        let count = min(splitOrig.count, splitTrans.count)
+        var result = ""
+        for i in 0..<count {
+            result += "\(i + 1)\n"
+            result += "\(formatTime(splitOrig[i].startMs)) --> \(formatTime(splitOrig[i].endMs))\n"
+            result += "\(splitOrig[i].text)\n\(splitTrans[i].text)\n\n"
+        }
+        return result
+    }
+
+    /// Split segments by detected language into separate groups.
+    /// Segments without a language tag are grouped under empty string key.
+    public static func splitByLanguage(_ segments: [SubtitleSegment]) -> [String: [SubtitleSegment]] {
+        var groups: [String: [SubtitleSegment]] = [:]
+        for seg in segments {
+            let lang = seg.language ?? ""
+            groups[lang, default: []].append(seg)
+        }
+        return groups
+    }
+
     /// Format milliseconds to SRT timecode: HH:MM:SS,mmm
     public static func formatTime(_ ms: Float) -> String {
         let totalMs = Int(max(0, ms))

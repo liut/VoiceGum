@@ -1,5 +1,15 @@
 import Foundation
 
+public enum TranslateOutputMode: String, CaseIterable, Sendable {
+    case bilingual
+    case translationOnly
+}
+
+public enum TranslateMode: String, CaseIterable, Sendable {
+    case batch
+    case perSegment
+}
+
 public final class AppPreferences: @unchecked Sendable {
     public static let shared = AppPreferences()
 
@@ -17,6 +27,12 @@ public final class AppPreferences: @unchecked Sendable {
         static let subtitleExportEnabled = "voicegum.asr.subtitleExportEnabled"
         static let autoSaveHistory = "voicegum.asr.autoSaveHistory"
         static let llmProvider = "voicegum.llmProvider"
+        static let autoTranslateEnabled = "voicegum.llm.autoTranslateEnabled"
+        static let translateTargetLanguage = "voicegum.llm.translateTargetLanguage"
+        static let translateOutputMode = "voicegum.llm.translateOutputMode"
+        static let translateMode = "voicegum.llm.translateMode"
+        static let translatePrompt = "voicegum.llm.translatePrompt"
+        static let languageSplitEnabled = "voicegum.llm.languageSplitEnabled"
     }
 
     private init() {
@@ -143,6 +159,52 @@ public final class AppPreferences: @unchecked Sendable {
     private var defaultSummaryPrompt: String {
         "You are a text summarization assistant. Create a concise summary of the following transcribed text. Capture the key points and main ideas while keeping the summary brief and well-structured."
     }
+
+    // MARK: - Translation
+
+    public var autoTranslateEnabled: Bool {
+        get { defaults.bool(forKey: Keys.autoTranslateEnabled) }
+        set { defaults.set(newValue, forKey: Keys.autoTranslateEnabled) }
+    }
+
+    public var translateTargetLanguage: String {
+        get { defaults.string(forKey: Keys.translateTargetLanguage) ?? "zh-CN" }
+        set { defaults.set(newValue, forKey: Keys.translateTargetLanguage) }
+    }
+
+    public var translateOutputMode: TranslateOutputMode {
+        get {
+            guard let raw = defaults.string(forKey: Keys.translateOutputMode),
+                  let mode = TranslateOutputMode(rawValue: raw) else {
+                return .bilingual
+            }
+            return mode
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.translateOutputMode) }
+    }
+
+    public var translateMode: TranslateMode {
+        get {
+            guard let raw = defaults.string(forKey: Keys.translateMode),
+                  let mode = TranslateMode(rawValue: raw) else {
+                return .batch
+            }
+            return mode
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.translateMode) }
+    }
+
+    public var translatePrompt: String {
+        get { defaults.string(forKey: Keys.translatePrompt) ?? AppPreferences.defaultTranslatePrompt }
+        set { defaults.set(newValue, forKey: Keys.translatePrompt) }
+    }
+
+    public var languageSplitEnabled: Bool {
+        get { defaults.bool(forKey: Keys.languageSplitEnabled) }
+        set { defaults.set(newValue, forKey: Keys.languageSplitEnabled) }
+    }
+
+    public static let defaultTranslatePrompt = "你是一个专业的字幕翻译助手。请将以下文本翻译为目标语言，保持口语化的表达风格，不要添加任何解释或额外内容，只输出翻译结果。"
 
     public func llmAPIKey(for provider: String? = nil) -> String {
         let p = provider ?? llmProvider

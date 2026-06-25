@@ -191,6 +191,17 @@ public actor LLMClient {
         return try await send(systemPrompt: systemPrompt, userPrompt: userPrompt, baseURL: baseURL)
     }
 
+    public func translate(text: String, targetLanguage: String, customPrompt: String? = nil) async throws -> String {
+        guard let baseURL = baseURL else {
+            throw LLMClientError.notConfigured
+        }
+
+        let systemPrompt = (customPrompt?.isEmpty == false) ? customPrompt! : "You are a professional subtitle translation assistant. Translate the following text to the target language. Preserve the conversational tone and style. Output only the translated text, no explanations or additional content."
+        let userPrompt = "Translate the following text to \(targetLanguage):\n\n\(text)"
+
+        return try await send(systemPrompt: systemPrompt, userPrompt: userPrompt, baseURL: baseURL)
+    }
+
     private func send(systemPrompt: String, userPrompt: String, baseURL: URL) async throws -> String {
         switch provider {
         case .ollama:

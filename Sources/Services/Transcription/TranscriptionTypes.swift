@@ -4,11 +4,13 @@ public struct SubtitleSegment: Sendable, Codable {
     public let text: String
     public let startMs: Float
     public let endMs: Float
+    public let language: String?
 
-    public init(text: String, startMs: Float, endMs: Float) {
+    public init(text: String, startMs: Float, endMs: Float, language: String? = nil) {
         self.text = text
         self.startMs = startMs
         self.endMs = endMs
+        self.language = language
     }
 }
 
@@ -18,13 +20,19 @@ public struct TranscriptionResult: Sendable, Codable {
     public let language: String?
     public let confidence: Float?
     public let segments: [SubtitleSegment]?
+    public let translatedText: String?
+    public let translatedSegments: [SubtitleSegment]?
+    public let translateTargetLanguage: String?
 
-    public init(text: String, timestamps: [Float]? = nil, language: String? = nil, confidence: Float? = nil, segments: [SubtitleSegment]? = nil) {
+    public init(text: String, timestamps: [Float]? = nil, language: String? = nil, confidence: Float? = nil, segments: [SubtitleSegment]? = nil, translatedText: String? = nil, translatedSegments: [SubtitleSegment]? = nil, translateTargetLanguage: String? = nil) {
         self.text = text
         self.timestamps = timestamps
         self.language = language
         self.confidence = confidence
         self.segments = segments
+        self.translatedText = translatedText
+        self.translatedSegments = translatedSegments
+        self.translateTargetLanguage = translateTargetLanguage
     }
 }
 
@@ -39,6 +47,9 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
     public let refinedText: String?
     public let summaryText: String?
     public var segments: [SubtitleSegment]?
+    public let translatedText: String?
+    public let translatedSegments: [SubtitleSegment]?
+    public let translateTargetLanguage: String?
 
     public var displayText: String { refinedText ?? rawText }
 
@@ -53,7 +64,9 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
     public init(id: String = UUID().uuidString, sourceFileName: String, timestamp: Date,
                 engineDescription: String, language: String?, duration: TimeInterval?,
                 rawText: String, refinedText: String? = nil, summaryText: String? = nil,
-                segments: [SubtitleSegment]? = nil) {
+                segments: [SubtitleSegment]? = nil,
+                translatedText: String? = nil, translatedSegments: [SubtitleSegment]? = nil,
+                translateTargetLanguage: String? = nil) {
         self.id = id
         self.sourceFileName = sourceFileName
         self.timestamp = timestamp
@@ -64,6 +77,9 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
         self.refinedText = refinedText
         self.summaryText = summaryText
         self.segments = segments
+        self.translatedText = translatedText
+        self.translatedSegments = translatedSegments
+        self.translateTargetLanguage = translateTargetLanguage
     }
 }
 
@@ -94,6 +110,7 @@ public enum TranscriptionState: Sendable {
     case preparing(ASR: String)
     case transcribing(progress: Double, currentFile: Int, totalFiles: Int)
     case refining
+    case translating
     case completed(results: [TranscriptionResult], files: [URL])
     case failed(error: Error)
     case cancelled

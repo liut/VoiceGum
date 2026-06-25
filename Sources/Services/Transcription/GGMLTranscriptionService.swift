@@ -121,16 +121,16 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
                 let segResult = sv_transcribe_segments(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
 
                 if segResult.count > 0, let segsPtr = segResult.segments {
+                    let detectedLanguage = segResult.language.map { String(cString: $0) } ?? language
                     var segments: [SubtitleSegment] = []
                     var textParts: [String] = []
                     for i in 0..<Int(segResult.count) {
                         let cSeg = segsPtr[i]
                         let text = cSeg.text.map { String(cString: $0) } ?? ""
-                        segments.append(SubtitleSegment(text: text, startMs: cSeg.t0_ms, endMs: cSeg.t1_ms))
+                        segments.append(SubtitleSegment(text: text, startMs: cSeg.t0_ms, endMs: cSeg.t1_ms, language: detectedLanguage))
                         textParts.append(text)
                     }
                     let combinedText = textParts.joined(separator: " ")
-                    let detectedLanguage = segResult.language.map { String(cString: $0) } ?? language
                     sv_free_result(segResult)
                     continuation.resume(returning: TranscriptionResult(text: combinedText, language: detectedLanguage, segments: segments))
                 } else {

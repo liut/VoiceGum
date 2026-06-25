@@ -34,6 +34,20 @@ public actor HistoryManager {
         persist()
     }
 
+    public func updateTranslatedText(id: String, translatedText: String?, translatedSegments: [SubtitleSegment]?, translateTargetLanguage: String?) {
+        guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
+        let e = entries[idx]
+        entries[idx] = HistoryEntry(
+            id: e.id, sourceFileName: e.sourceFileName, timestamp: e.timestamp,
+            engineDescription: e.engineDescription, language: e.language, duration: e.duration,
+            rawText: e.rawText, refinedText: e.refinedText, summaryText: e.summaryText,
+            segments: e.segments,
+            translatedText: translatedText, translatedSegments: translatedSegments,
+            translateTargetLanguage: translateTargetLanguage
+        )
+        persist()
+    }
+
     public func updateSummary(id: String, summaryText: String) {
         guard let idx = entries.firstIndex(where: { $0.id == id }) else { return }
         let e = entries[idx]

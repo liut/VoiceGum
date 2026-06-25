@@ -55,6 +55,9 @@ public struct MainView: View {
                 case .refining:
                     RefiningView()
 
+                case .translating:
+                    TranslatingView()
+
                 case .completed(let results, _):
                     ResultView(
                         results: results,

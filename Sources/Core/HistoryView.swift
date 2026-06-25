@@ -186,6 +186,16 @@ private struct HistoryDetailView: View {
                         )
                     }
 
+                    if let translatedText = entry.translatedText {
+                        Divider()
+                        let langLabel = entry.translateTargetLanguage.map { " (\($0))" } ?? ""
+                        sectionBlock(
+                            title: "\(String(localized: "翻译"))\(langLabel)",
+                            color: .orange,
+                            text: translatedText
+                        )
+                    }
+
                     if entry.refinedText != nil {
                         Divider()
                         sectionBlock(
