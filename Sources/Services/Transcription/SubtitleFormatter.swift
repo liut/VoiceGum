@@ -72,15 +72,31 @@ public enum SubtitleFormatter {
 
     // MARK: - Stage 1 — merge short segments (< 300ms)
 
+    /// Returns true if the character is a natural text boundary (whitespace or punctuation).
+    private static func isNaturalBreak(_ ch: Character) -> Bool {
+        if ch.isWhitespace { return true }
+        switch ch {
+        case ".", "!", "?", ",", ";", ":", "。", "！", "？", "、", "：",
+             "）", ")", "」", "]", "】", "\"", "'", "”", "’":
+            return true
+        default:
+            return false
+        }
+    }
+
     private static func mergeShortSegments(_ segments: [SubtitleSegment]) -> [SubtitleSegment] {
         guard segments.count > 1 else { return segments }
         var result: [SubtitleSegment] = [segments[0]]
         for i in 1..<segments.count {
             let seg = segments[i]
-            if seg.endMs - seg.startMs < 300 {
-                let prev = result.removeLast()
+            let prev = result[result.count - 1]
+            let isShort = seg.endMs - seg.startMs < 300
+            let isMidWord = !prev.text.isEmpty && !isNaturalBreak(prev.text.last!)
+            if isShort || isMidWord {
+                result.removeLast()
+                let separator = isMidWord && !isShort ? "" : " "
                 result.append(SubtitleSegment(
-                    text: prev.text + " " + seg.text,
+                    text: prev.text + separator + seg.text,
                     startMs: prev.startMs,
                     endMs: seg.endMs
                 ))

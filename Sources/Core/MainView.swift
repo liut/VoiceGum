@@ -9,7 +9,7 @@ public struct MainView: View {
 
     private func isLLMConfigured() -> Bool {
         let provider = AppPreferences.shared.llmProvider
-        if provider == "ollama" { return true }
+        if provider == "ollama" || provider == "llamacli" { return true }
         return !AppPreferences.shared.llmAPIKey().isEmpty
     }
 

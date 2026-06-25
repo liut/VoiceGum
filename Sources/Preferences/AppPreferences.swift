@@ -33,6 +33,7 @@ public final class AppPreferences: @unchecked Sendable {
         static let translateMode = "voicegum.llm.translateMode"
         static let translatePrompt = "voicegum.llm.translatePrompt"
         static let languageSplitEnabled = "voicegum.llm.languageSplitEnabled"
+        static let llamaCLIThreads = "voicegum.llm.llamacli.threads"
     }
 
     private init() {
@@ -40,7 +41,7 @@ public final class AppPreferences: @unchecked Sendable {
     }
 
     private func sanitizeProvider() {
-        let validProviders = ["ollama", "openai", "azure", "anthropic"]
+        let validProviders = ["ollama", "openai", "azure", "anthropic", "llamacli"]
         let current = defaults.string(forKey: Keys.llmProvider) ?? ""
         if !current.isEmpty, !validProviders.contains(current) {
             defaults.set("openai", forKey: Keys.llmProvider)
@@ -202,6 +203,25 @@ public final class AppPreferences: @unchecked Sendable {
     public var languageSplitEnabled: Bool {
         get { defaults.bool(forKey: Keys.languageSplitEnabled) }
         set { defaults.set(newValue, forKey: Keys.languageSplitEnabled) }
+    }
+
+    public var llamaCLIThreads: Int {
+        get {
+            let v = defaults.integer(forKey: Keys.llamaCLIThreads)
+            return v > 0 ? v : 4
+        }
+        set { defaults.set(newValue, forKey: Keys.llamaCLIThreads) }
+    }
+
+    /// Whether `llama-cli` is available in PATH.
+    public var isLLaMACLIAvailable: Bool {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/local/bin:/usr/bin"
+        let dirs = path.split(separator: ":")
+        for dir in dirs {
+            let p = URL(fileURLWithPath: String(dir)).appendingPathComponent("llama-cli")
+            if FileManager.default.isExecutableFile(atPath: p.path) { return true }
+        }
+        return false
     }
 
     public static let defaultTranslatePrompt = "你是一个专业的字幕翻译助手。请将以下文本翻译为目标语言，保持口语化的表达风格，不要添加任何解释或额外内容，只输出翻译结果。"

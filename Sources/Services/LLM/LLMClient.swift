@@ -1,10 +1,12 @@
 import Foundation
+import VoiceGumPreferences
 
 public enum LLMProvider: String, CaseIterable, Sendable {
     case ollama = "ollama"
     case openai = "openai"
     case azure = "azure"
     case anthropic = "anthropic"
+    case llamaCLI = "llamacli"
 
     public var displayName: String {
         switch self {
@@ -12,12 +14,13 @@ public enum LLMProvider: String, CaseIterable, Sendable {
         case .openai: return "OpenAI"
         case .azure: return "Azure OpenAI"
         case .anthropic: return "Anthropic"
+        case .llamaCLI: return "llama-cli (Local)"
         }
     }
 
     public var requiresAPIKey: Bool {
         switch self {
-        case .ollama: return false
+        case .ollama, .llamaCLI: return false
         default: return true
         }
     }
@@ -58,6 +61,7 @@ public actor LLMClient {
     /// URLSession.shared dispatches to main queue → "process not responding" during long requests.
     private nonisolated let urlSession: URLSession = {
         let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120
         let queue = OperationQueue()
         queue.qualityOfService = .userInitiated
         queue.maxConcurrentOperationCount = 1
@@ -135,7 +139,7 @@ public actor LLMClient {
     }
 
     public func isConfigured() -> Bool {
-        if provider == .ollama { return true }
+        if provider == .ollama || provider == .llamaCLI { return !model.isEmpty }
         guard let _ = baseURL else { return false }
         if provider.requiresAPIKey {
             return apiKey != nil && !apiKey!.isEmpty
@@ -208,6 +212,8 @@ public actor LLMClient {
             return try await ollamaChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
         case .anthropic:
             return try await anthropicChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
+        case .llamaCLI:
+            return try await llamaCLIChat(systemPrompt: systemPrompt, userPrompt: userPrompt)
         default:
             return try await openaiChat(baseURL: baseURL, model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
         }
@@ -217,6 +223,7 @@ public actor LLMClient {
         let url = buildURL(base: baseURL, path: "chat/completions")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key = apiKey, !key.isEmpty {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -269,6 +276,7 @@ public actor LLMClient {
         let url = buildURL(base: baseURL, path: "v1/messages")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key = apiKey, !key.isEmpty {
             request.setValue(key, forHTTPHeaderField: "x-api-key")
@@ -325,6 +333,7 @@ public actor LLMClient {
         let url = buildURL(base: baseURL, path: "api/chat")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         struct OllamaReq: Encodable {
@@ -367,5 +376,49 @@ public actor LLMClient {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(500))")
         }
+    }
+
+    private func llamaCLIChat(systemPrompt: String, userPrompt: String) async throws -> String {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/llama-cli")
+
+        let isLocalPath = model.hasPrefix("/") || model.hasPrefix("~") || model.hasSuffix(".gguf")
+        if isLocalPath {
+            proc.arguments = ["-m", model]
+        } else {
+            proc.arguments = ["-hf", model]
+        }
+        let threads = AppPreferences.shared.llamaCLIThreads
+        proc.arguments! += [
+            "-sys", systemPrompt,
+            "-p", userPrompt,
+            "--single-turn",
+            "--no-display-prompt",
+            "-n", "4096",
+            "-t", "\(threads)"
+        ]
+
+        let outPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = FileHandle.nullDevice
+
+        await Logger.shared.info("llama-cli 开始: model=\(model)")
+
+        try proc.run()
+        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+
+        guard proc.terminationStatus == 0 else {
+            throw LLMClientError.networkFailed("llama-cli exit code \(proc.terminationStatus)")
+        }
+
+        let output = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !output.isEmpty else {
+            throw LLMClientError.networkFailed("llama-cli 返回空结果")
+        }
+
+        await Logger.shared.info("llama-cli 完成: \(output.prefix(200))")
+        return output
     }
 }

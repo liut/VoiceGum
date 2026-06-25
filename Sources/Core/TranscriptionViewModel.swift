@@ -413,20 +413,30 @@ final class TranscriptionViewModel: ObservableObject {
 
                     if let segments = result.segments, !segments.isEmpty {
                         if translateMode == .batch {
-                            var markedText = ""
-                            for (i, seg) in segments.enumerated() {
-                                markedText += "[SEGMENT \(i + 1)]\n\(seg.text)\n[/SEGMENT \(i + 1)]\n"
+                            let chunks = chunkSegments(segments)
+                            var allRawTexts: [String] = []
+                            var allTranslatedSegments: [SubtitleSegment] = []
+
+                            for chunk in chunks {
+                                var markedText = ""
+                                for (i, seg) in chunk {
+                                    markedText += "[SEGMENT \(i + 1)]\n\(seg.text)\n[/SEGMENT \(i + 1)]\n"
+                                }
+                                let instruction = "Keep the [SEGMENT N] and [/SEGMENT N] markers exactly as-is. Translate only the text between each marker pair — do not merge or reorder segments. Each output segment must correspond 1:1 to the input segment.\n\n"
+                                let raw = try await LLMClient.shared.translate(
+                                    text: instruction + markedText, targetLanguage: capturedTargetLang,
+                                    customPrompt: customPrompt)
+                                allRawTexts.append(raw)
+                                let parsed = parseTranslatedSegments(raw: raw, original: segments)
+                                allTranslatedSegments.append(contentsOf: parsed)
                             }
-                            // Prepend marker-preservation instruction so LLM keeps segment boundaries
-                            let instruction = "Keep the [SEGMENT N] and [/SEGMENT N] markers exactly as-is. Translate only the text between each marker pair — do not merge or reorder segments. Each output segment must correspond 1:1 to the input segment.\n\n"
-                            let raw = try await LLMClient.shared.translate(
-                                text: instruction + markedText, targetLanguage: capturedTargetLang,
-                                customPrompt: customPrompt)
-                            translatedText = raw
-                            translatedSegments = parseTranslatedSegments(raw: raw, original: segments)
-                            if translatedSegments.isEmpty {
+
+                            translatedText = allRawTexts.joined(separator: "\n\n")
+                            translatedSegments = allTranslatedSegments.sorted { $0.startMs < $1.startMs }
+                            if translatedSegments.isEmpty, !allRawTexts.isEmpty {
                                 translatedSegments = [SubtitleSegment(
-                                    text: raw, startMs: segments.first?.startMs ?? 0,
+                                    text: allRawTexts.joined(separator: "\n\n"),
+                                    startMs: segments.first?.startMs ?? 0,
                                     endMs: segments.last?.endMs ?? 0, language: capturedTargetLang)]
                             }
                         } else {
@@ -473,6 +483,22 @@ final class TranscriptionViewModel: ObservableObject {
             }
             if let onComplete { await onComplete() }
         }
+    }
+
+    private nonisolated let maxSegmentsPerChunk = 80
+
+    private nonisolated func chunkSegments(_ segments: [SubtitleSegment]) -> [[(Int, SubtitleSegment)]] {
+        var chunks: [[(Int, SubtitleSegment)]] = []
+        var current: [(Int, SubtitleSegment)] = []
+        for (i, seg) in segments.enumerated() {
+            current.append((i, seg))
+            if current.count >= maxSegmentsPerChunk {
+                chunks.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
     }
 
     /// Parse batch translation response back to segments by matching [SEGMENT N] markers.
@@ -675,12 +701,17 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     private func configureLLMClient() async {
-        guard let baseURL = URL(string: AppPreferences.shared.llmBaseURL()) else { return }
-        let provider: LLMProvider = switch AppPreferences.shared.llmProvider {
+        let providerStr = AppPreferences.shared.llmProvider
+        let provider: LLMProvider = switch providerStr {
         case "anthropic": .anthropic
         case "ollama": .ollama
+        case "llamacli": .llamaCLI
         default: .openai
         }
+        let baseURL = provider == .llamaCLI
+            ? URL(string: "http://localhost")!
+            : URL(string: AppPreferences.shared.llmBaseURL())
+        guard let baseURL else { return }
         let apiKey = AppPreferences.shared.llmAPIKey()
         await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
     }

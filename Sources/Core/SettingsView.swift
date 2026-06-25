@@ -431,6 +431,7 @@ struct LLMSettingsTab: View {
     @State private var availableModels: [String] = []
     @State private var isFetchingModels = false
     @State private var fetchStatus: String? = nil
+    @State private var llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
     private var modelFetchTask = ModelFetchTask()
 
     /// Mutable box so we can cancel in-flight fetch without @State concurrency warnings.
@@ -440,7 +441,13 @@ struct LLMSettingsTab: View {
         func cancel() { current?.cancel(); current = nil }
     }
 
-    let providers = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
+    private var providers: [(String, String)] {
+        var list: [(String, String)] = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
+        if AppPreferences.shared.isLLaMACLIAvailable {
+            list.append(("llamacli", "llama-cli (Local)"))
+        }
+        return list
+    }
 
     var body: some View {
         Form {
@@ -455,58 +462,67 @@ struct LLMSettingsTab: View {
                         : nil
                     fetchModels()
                 }
-                SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
-                    .onChange(of: apiKey) { saveAPIKey() }
-                TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
-                    .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
-
-                HStack(spacing: 4) {
-                    TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
-                        .focused($modelFieldFocused)
-                        .onChange(of: llmModel) {
-                            AppPreferences.shared.setLLMModel(llmModel)
-                            if !llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                modelMissingError = nil
-                            }
-                        }
-                        .onChange(of: modelFieldFocused) { _, focused in
-                            if !focused {
-                                modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? String(localized: "请输入模型名称")
-                                    : nil
-                            }
-                        }
-                    Menu {
-                        if availableModels.isEmpty {
-                            Text(String(localized: "请先点击刷新按钮获取模型列表")).foregroundColor(.secondary)
-                        } else {
-                            ForEach(availableModels, id: \.self) { m in
-                                Button(m) { llmModel = m }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.down").frame(width: 20)
-                    }
-                    .frame(width: 24)
-
-                    Button { fetchModels() } label: {
-                        if isFetchingModels {
-                            ProgressView().scaleEffect(0.7).frame(width: 16, height: 16)
-                        } else {
-                            Image(systemName: "arrow.clockwise").frame(width: 16)
-                        }
-                    }
-                    .disabled(isFetchingModels)
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(String(localized: "刷新可用模型列表"))
-                    .frame(width: 20)
+                if llmProvider != "llamacli" {
+                    SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
+                        .onChange(of: apiKey) { saveAPIKey() }
+                    TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
+                        .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
                 }
-                .accessibilityElement(children: .combine)
-                if let status = fetchStatus {
-                    Text(status).foregroundColor(availableModels.isEmpty ? .orange : .green).font(.caption)
-                }
-                if let err = modelMissingError {
-                    Text(err).foregroundColor(.red).font(.caption)
+
+                if llmProvider == "llamacli" {
+                    TextField(String(localized: "HF Repo 或模型路径"), text: $llmModel).textFieldStyle(.roundedBorder)
+                        .onChange(of: llmModel) { AppPreferences.shared.setLLMModel(llmModel) }
+                    Stepper(String(localized: "线程数: \(llamaCLIThreads)"), value: $llamaCLIThreads, in: 1...16)
+                        .onChange(of: llamaCLIThreads) { AppPreferences.shared.llamaCLIThreads = llamaCLIThreads }
+                } else {
+                    HStack(spacing: 4) {
+                        TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
+                            .focused($modelFieldFocused)
+                            .onChange(of: llmModel) {
+                                AppPreferences.shared.setLLMModel(llmModel)
+                                if !llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    modelMissingError = nil
+                                }
+                            }
+                            .onChange(of: modelFieldFocused) { _, focused in
+                                if !focused {
+                                    modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? String(localized: "请输入模型名称")
+                                        : nil
+                                }
+                            }
+                        Menu {
+                            if availableModels.isEmpty {
+                                Text(String(localized: "请先点击刷新按钮获取模型列表")).foregroundColor(.secondary)
+                            } else {
+                                ForEach(availableModels, id: \.self) { m in
+                                    Button(m) { llmModel = m }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down").frame(width: 20)
+                        }
+                        .frame(width: 24)
+
+                        Button { fetchModels() } label: {
+                            if isFetchingModels {
+                                ProgressView().scaleEffect(0.7).frame(width: 16, height: 16)
+                            } else {
+                                Image(systemName: "arrow.clockwise").frame(width: 16)
+                            }
+                        }
+                        .disabled(isFetchingModels)
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(String(localized: "刷新可用模型列表"))
+                        .frame(width: 20)
+                    }
+                    .accessibilityElement(children: .combine)
+                    if let status = fetchStatus {
+                        Text(status).foregroundColor(availableModels.isEmpty ? .orange : .green).font(.caption)
+                    }
+                    if let err = modelMissingError {
+                        Text(err).foregroundColor(.red).font(.caption)
+                    }
                 }
             }
             Section {
@@ -564,6 +580,7 @@ struct LLMSettingsTab: View {
             summaryPrompt = AppPreferences.shared.summaryPrompt
             translateMode = AppPreferences.shared.translateMode
             translatePrompt = AppPreferences.shared.translatePrompt
+            llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
             loadProviderConfig()
             fetchModels()
         }
@@ -573,9 +590,11 @@ struct LLMSettingsTab: View {
         llmBaseURL = AppPreferences.shared.llmBaseURL()
         llmModel = AppPreferences.shared.llmModel()
         apiKey = AppPreferences.shared.llmAPIKey()
+        llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
     }
 
     private func fetchModels() {
+        guard llmProvider != "llamacli" else { return }
         modelFetchTask.cancel()
         isFetchingModels = true
         fetchStatus = nil
@@ -603,6 +622,27 @@ struct LLMSettingsTab: View {
 
     private func testConnection() {
         testError = ""; testSuccess = false
+        if llmProvider == "llamacli" {
+            guard !llmModel.isEmpty else { testError = "请输入 HF Repo 或模型路径"; return }
+            Task {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/llama-cli")
+                proc.arguments = ["--version"]
+                let pipe = Pipe()
+                proc.standardOutput = pipe
+                proc.standardError = FileHandle.nullDevice
+                do {
+                    try proc.run()
+                    proc.waitUntilExit()
+                    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                    testSuccess = true
+                    testError = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                } catch {
+                    testError = "llama-cli 启动失败: \(error.localizedDescription)"
+                }
+            }
+            return
+        }
         guard !llmBaseURL.isEmpty else { testError = "请输入 Base URL"; return }
         guard let baseURL = URL(string: llmBaseURL) else { testError = "无效的 URL: \(llmBaseURL)"; return }
         Task {
@@ -610,6 +650,7 @@ struct LLMSettingsTab: View {
                 let provider: LLMProvider = switch llmProvider {
                 case "anthropic": .anthropic
                 case "ollama": .ollama
+                case "llamacli": .llamaCLI
                 default: .openai
                 }
                 await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: llmModel)
