@@ -170,6 +170,10 @@ struct GeneralSettingsTab: View {
     @State private var selectedLanguage = AppPreferences.shared.language
     @State private var subtitleExport = AppPreferences.shared.subtitleExportEnabled
     @State private var autoSaveHistory = AppPreferences.shared.autoSaveHistory
+    @State private var autoTranslate = AppPreferences.shared.autoTranslateEnabled
+    @State private var translateTarget = AppPreferences.shared.translateTargetLanguage
+    @State private var translateOutput = AppPreferences.shared.translateOutputMode
+    @State private var languageSplit = AppPreferences.shared.languageSplitEnabled
 
     let languageOptions: [(String, String)] = [
         ("zh-CN", "中文普通话"),
@@ -179,6 +183,13 @@ struct GeneralSettingsTab: View {
         ("ko", "한국어"),
         ("yue", "粤语"),
         ("auto", String(localized: "自动检测")),
+    ]
+
+    let translateLanguageOptions: [(String, String)] = [
+        ("zh-CN", "中文"),
+        ("en", "English"),
+        ("ja", "日本語"),
+        ("ko", "한국어"),
     ]
 
     var isLocal: Bool { AppPreferences.shared.asrProvider != "online" }
@@ -205,6 +216,41 @@ struct GeneralSettingsTab: View {
                         .onChange(of: subtitleExport) { AppPreferences.shared.subtitleExportEnabled = $0 }
                     }
 
+                    Divider()
+
+                    Toggle(isOn: $autoTranslate) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "自动翻译"))
+                            Text(String(localized: "检测到语言不匹配时自动翻译字幕"))
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    .onChange(of: autoTranslate) { AppPreferences.shared.autoTranslateEnabled = $0 }
+
+                    if autoTranslate {
+                        Picker(String(localized: "目标语言"), selection: $translateTarget) {
+                            ForEach(translateLanguageOptions, id: \.0) { Text($0.1).tag($0.0) }
+                        }
+                        .onChange(of: translateTarget) { AppPreferences.shared.translateTargetLanguage = $0 }
+
+                        Picker(String(localized: "输出模式"), selection: $translateOutput) {
+                            Text(String(localized: "双语")).tag(TranslateOutputMode.bilingual)
+                            Text(String(localized: "仅译文")).tag(TranslateOutputMode.translationOnly)
+                        }
+                        .onChange(of: translateOutput) { AppPreferences.shared.translateOutputMode = $0 }
+
+                        if isLocal {
+                            Toggle(isOn: $languageSplit) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(String(localized: "按语言分拆字幕"))
+                                    Text(String(localized: "检测到多语言时分别生成字幕文件"))
+                                        .font(.caption).foregroundColor(.secondary)
+                                }
+                            }
+                            .onChange(of: languageSplit) { AppPreferences.shared.languageSplitEnabled = $0 }
+                        }
+                    }
+
                     Toggle(isOn: $autoSaveHistory) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(localized: "自动保存历史"))
@@ -223,6 +269,10 @@ struct GeneralSettingsTab: View {
             selectedLanguage = AppPreferences.shared.language
             subtitleExport = AppPreferences.shared.subtitleExportEnabled
             autoSaveHistory = AppPreferences.shared.autoSaveHistory
+            autoTranslate = AppPreferences.shared.autoTranslateEnabled
+            translateTarget = AppPreferences.shared.translateTargetLanguage
+            translateOutput = AppPreferences.shared.translateOutputMode
+            languageSplit = AppPreferences.shared.languageSplitEnabled
         }
     }
 }
@@ -371,6 +421,8 @@ struct LLMSettingsTab: View {
     @State private var llmModel = AppPreferences.shared.llmModel()
     @State private var refinePrompt = AppPreferences.shared.refinePrompt
     @State private var summaryPrompt = AppPreferences.shared.summaryPrompt
+    @State private var translateMode = AppPreferences.shared.translateMode
+    @State private var translatePrompt = AppPreferences.shared.translatePrompt
     @State private var apiKey = ""
     @State private var testSuccess = false
     @State private var testError = ""
@@ -485,6 +537,22 @@ struct LLMSettingsTab: View {
                         .frame(minHeight: 60)
                         .onChange(of: summaryPrompt) { AppPreferences.shared.summaryPrompt = summaryPrompt }
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(String(localized: "自动翻译")).font(.headline)
+                        Spacer()
+                    }
+                    Text(String(localized: "Translate — 翻译字幕文本")).font(.caption).foregroundColor(.secondary)
+                    Picker(String(localized: "翻译模式"), selection: $translateMode) {
+                        Text(String(localized: "逐条翻译")).tag(TranslateMode.perSegment)
+                        Text(String(localized: "整批翻译")).tag(TranslateMode.batch)
+                    }
+                    .onChange(of: translateMode) { AppPreferences.shared.translateMode = $0 }
+                    TextEditor(text: $translatePrompt)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 60)
+                        .onChange(of: translatePrompt) { AppPreferences.shared.translatePrompt = translatePrompt }
+                }
             }
         }
         .formStyle(.grouped)
@@ -494,6 +562,8 @@ struct LLMSettingsTab: View {
             llmProvider = AppPreferences.shared.llmProvider
             refinePrompt = AppPreferences.shared.refinePrompt
             summaryPrompt = AppPreferences.shared.summaryPrompt
+            translateMode = AppPreferences.shared.translateMode
+            translatePrompt = AppPreferences.shared.translatePrompt
             loadProviderConfig()
             fetchModels()
         }

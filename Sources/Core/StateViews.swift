@@ -113,6 +113,19 @@ struct RefiningView: View {
     }
 }
 
+struct TranslatingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .progressViewStyle(.circular)
+            Text(String(localized: "正在翻译字幕..."))
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct ResultView: View {
     let results: [TranscriptionResult]
     let onCopy: () -> Void
