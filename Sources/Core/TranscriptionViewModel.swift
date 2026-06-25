@@ -550,20 +550,23 @@ final class TranscriptionViewModel: ObservableObject {
                         : SubtitleFormatter.toSRTBilingual(original: groupOrig, translated: groupTrans)
                     guard !srtText.isEmpty else { continue }
                     let srtName = "\(stem)_\(ts).\(groupLang).srt"
-                    // If this group matches the original language, overwrite original file
+                    // Single language: overwrite original; multi-language: separate per-language files
                     let srtURL: URL
-                    if let origURL = originalSRTURL, groupLang == languageSuffix(AppPreferences.shared.language) {
+                    if let origURL = originalSRTURL, groups.count == 1 {
                         srtURL = origURL
                     } else {
                         srtURL = resultDir.appendingPathComponent(srtName)
                     }
                     try? srtText.write(to: srtURL, atomically: true, encoding: .utf8)
                 case .translationOnly:
-                    // Write per-language original file (unfiltered original already exists from generateSRTFile)
-                    let origSRT = SubtitleFormatter.toSRT(groupOrig)
-                    if !origSRT.isEmpty {
-                        let origName = "\(stem)_\(ts).\(groupLang).srt"
-                        try? origSRT.write(to: resultDir.appendingPathComponent(origName), atomically: true, encoding: .utf8)
+                    // Only write per-language original when multiple languages detected;
+                    // for single-language audio the unfiltered original from generateSRTFile suffices.
+                    if groups.count > 1 {
+                        let origSRT = SubtitleFormatter.toSRT(groupOrig)
+                        if !origSRT.isEmpty {
+                            let origName = "\(stem)_\(ts).\(groupLang).srt"
+                            try? origSRT.write(to: resultDir.appendingPathComponent(origName), atomically: true, encoding: .utf8)
+                        }
                     }
                     if !groupTrans.isEmpty {
                         let transSRT = SubtitleFormatter.toSRT(groupTrans)
