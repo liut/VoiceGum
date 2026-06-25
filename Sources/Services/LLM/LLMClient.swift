@@ -73,6 +73,67 @@ public actor LLMClient {
         self.model = model
     }
 
+    /// Fetch available model names by probing common model-list endpoints.
+    /// Tries multiple URL candidates in priority order, auto-detects response format.
+    /// - Parameters:
+    ///   - provider: Provider identifier string (unused, kept for API compatibility)
+    ///   - baseURL: Base URL string from settings (may be empty)
+    ///   - apiKey: Optional API key for authenticated endpoints
+    /// - Returns: Array of model name strings, or empty array if all candidates fail
+    public nonisolated func fetchAvailableModels(provider: String, baseURL: String?, apiKey: String?) async -> [String] {
+        guard let raw = baseURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let resolved = URL(string: raw) else { return [] }
+
+        let scheme = resolved.scheme ?? "https"
+        let host = resolved.host ?? ""
+        guard !host.isEmpty else { return [] }
+
+        // Build candidates in priority order, deduplicated
+        var seen = Set<URL>()
+        var candidates: [URL] = []
+
+        func add(_ url: URL) {
+            if seen.insert(url).inserted { candidates.append(url) }
+        }
+
+        // 1. HOST/PATH/models — full base URL + /models (OpenAI compat)
+        add(buildURL(base: resolved, path: "models"))
+        // 2. HOST/models — host only + /models
+        add(URL(string: "\(scheme)://\(host)")!.appendingPathComponent("models"))
+        // 3. HOST/v1/models
+        add(URL(string: "\(scheme)://\(host)")!.appendingPathComponent("v1/models"))
+        // 4. HOST/PATH/api/tags — Ollama fallback
+        add(buildURL(base: resolved, path: "api/tags"))
+
+        let key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        for url in candidates {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 3
+            if !key.isEmpty {
+                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            }
+
+            guard let (data, _) = try? await performRequest(request) else { continue }
+            if let models = parseModelList(data) { return models }
+        }
+
+        return []
+    }
+
+    /// Try OpenAI format first, then Ollama format.
+    private nonisolated func parseModelList(_ data: Data) -> [String]? {
+        // OpenAI /v1/models: {"object":"list","data":[{"id":"gpt-4",...}]}
+        struct OAI: Decodable { let data: [M]; struct M: Decodable { let id: String } }
+        if let r = try? JSONDecoder().decode(OAI.self, from: data), !r.data.isEmpty { return r.data.map(\.id) }
+        // Ollama /api/tags: {"models":[{"name":"llama3:8b",...}]}
+        struct OllamaM: Decodable { let models: [M]; struct M: Decodable { let name: String } }
+        if let r = try? JSONDecoder().decode(OllamaM.self, from: data), !r.models.isEmpty { return r.models.map(\.name) }
+        return nil
+    }
+
     public func isConfigured() -> Bool {
         if provider == .ollama { return true }
         guard let _ = baseURL else { return false }

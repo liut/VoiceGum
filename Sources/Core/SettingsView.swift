@@ -376,6 +376,17 @@ struct LLMSettingsTab: View {
     @State private var testError = ""
     @State private var modelMissingError: String? = nil
     @FocusState private var modelFieldFocused: Bool
+    @State private var availableModels: [String] = []
+    @State private var isFetchingModels = false
+    @State private var fetchStatus: String? = nil
+    private var modelFetchTask = ModelFetchTask()
+
+    /// Mutable box so we can cancel in-flight fetch without @State concurrency warnings.
+    @MainActor
+    final class ModelFetchTask {
+        var current: Task<Void, Never>?
+        func cancel() { current?.cancel(); current = nil }
+    }
 
     let providers = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
 
@@ -390,29 +401,70 @@ struct LLMSettingsTab: View {
                     modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? String(localized: "请输入模型名称")
                         : nil
-                }
-                TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
-                    .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
-                TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
-                    .focused($modelFieldFocused)
-                    .onChange(of: llmModel) {
-                        AppPreferences.shared.setLLMModel(llmModel)
-                        if !llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            modelMissingError = nil
-                        }
-                    }
-                    .onChange(of: modelFieldFocused) { _, focused in
-                        if !focused {
-                            modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? String(localized: "请输入模型名称")
-                                : nil
-                        }
-                    }
-                if let err = modelMissingError {
-                    Text(err).foregroundColor(.red).font(.caption)
+                    fetchModels()
                 }
                 SecureField("API Key", text: $apiKey).textFieldStyle(.roundedBorder)
                     .onChange(of: apiKey) { saveAPIKey() }
+                TextField("Base URL", text: $llmBaseURL).textFieldStyle(.roundedBorder)
+                    .onChange(of: llmBaseURL) { AppPreferences.shared.setLLMBaseURL(llmBaseURL) }
+
+                HStack(spacing: 4) {
+                    TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
+                        .focused($modelFieldFocused)
+                        .onChange(of: llmModel) {
+                            AppPreferences.shared.setLLMModel(llmModel)
+                            if !llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                modelMissingError = nil
+                            }
+                        }
+                        .onChange(of: modelFieldFocused) { _, focused in
+                            if !focused {
+                                modelMissingError = llmModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? String(localized: "请输入模型名称")
+                                    : nil
+                            }
+                        }
+                    Menu {
+                        if availableModels.isEmpty {
+                            Text(String(localized: "请先点击刷新按钮获取模型列表")).foregroundColor(.secondary)
+                        } else {
+                            ForEach(availableModels, id: \.self) { m in
+                                Button(m) { llmModel = m }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down").frame(width: 20)
+                    }
+                    .frame(width: 24)
+
+                    Button { fetchModels() } label: {
+                        if isFetchingModels {
+                            ProgressView().scaleEffect(0.7).frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: "arrow.clockwise").frame(width: 16)
+                        }
+                    }
+                    .disabled(isFetchingModels)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "刷新可用模型列表"))
+                    .frame(width: 20)
+                }
+                .accessibilityElement(children: .combine)
+                if let status = fetchStatus {
+                    Text(status).foregroundColor(availableModels.isEmpty ? .orange : .green).font(.caption)
+                }
+                if let err = modelMissingError {
+                    Text(err).foregroundColor(.red).font(.caption)
+                }
+            }
+            Section {
+                HStack {
+                    Button(String(localized: "测试")) { testConnection() }.buttonStyle(.bordered)
+                    Spacer()
+                    Button(String(localized: "清空 Key")) { apiKey = ""; saveAPIKey() }.buttonStyle(.bordered)
+                }
+                if testSuccess { Text(String(localized: "连接成功!")).foregroundColor(.green).font(.caption) }
+                if !testError.isEmpty { Text(testError).foregroundColor(.red).font(.caption).textSelection(.enabled) }
             }
             Section(String(localized: "任务提示词")) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -434,15 +486,6 @@ struct LLMSettingsTab: View {
                         .onChange(of: summaryPrompt) { AppPreferences.shared.summaryPrompt = summaryPrompt }
                 }
             }
-            Section {
-                HStack {
-                    Button(String(localized: "测试")) { testConnection() }.buttonStyle(.bordered)
-                    Spacer()
-                    Button(String(localized: "清空 Key")) { apiKey = ""; saveAPIKey() }.buttonStyle(.bordered)
-                }
-                if testSuccess { Text(String(localized: "连接成功!")).foregroundColor(.green).font(.caption) }
-                if !testError.isEmpty { Text(testError).foregroundColor(.red).font(.caption).textSelection(.enabled) }
-            }
         }
         .formStyle(.grouped)
         .onAppear {
@@ -452,6 +495,7 @@ struct LLMSettingsTab: View {
             refinePrompt = AppPreferences.shared.refinePrompt
             summaryPrompt = AppPreferences.shared.summaryPrompt
             loadProviderConfig()
+            fetchModels()
         }
     }
 
@@ -459,6 +503,28 @@ struct LLMSettingsTab: View {
         llmBaseURL = AppPreferences.shared.llmBaseURL()
         llmModel = AppPreferences.shared.llmModel()
         apiKey = AppPreferences.shared.llmAPIKey()
+    }
+
+    private func fetchModels() {
+        modelFetchTask.cancel()
+        isFetchingModels = true
+        fetchStatus = nil
+        let provider = llmProvider
+        let baseURL = AppPreferences.shared.llmBaseURL(for: provider)
+        let key = AppPreferences.shared.llmAPIKey(for: provider)
+        modelFetchTask.current = Task { @MainActor in
+            let models = await LLMClient.shared.fetchAvailableModels(provider: provider, baseURL: baseURL, apiKey: key)
+            guard !Task.isCancelled else { return }
+            self.availableModels = models
+            self.isFetchingModels = false
+            if models.isEmpty {
+                self.fetchStatus = baseURL.isEmpty
+                    ? String(localized: "请先填写 Base URL")
+                    : String(localized: "未找到可用模型")
+            } else {
+                self.fetchStatus = String(localized: "已加载 \(models.count) 个模型")
+            }
+        }
     }
 
     private func saveAPIKey() {
