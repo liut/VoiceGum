@@ -241,6 +241,7 @@ final class TranscriptionViewModel: ObservableObject {
                             await MainActor.run { [weak self] in
                                 self?.state = .completed(results: refined, files: capturedFiles)
                                 self?.saveResults(refined, files: capturedFiles, engineDescs: capturedEngineDescs)
+                                self?.generateSRTFile(results: capturedResults, sourceURL: capturedFiles[0])
                                 if capturedSummaryEnabled { self?.summarize() }
                             }
                         } catch {
@@ -255,6 +256,7 @@ final class TranscriptionViewModel: ObservableObject {
 
                 state = .completed(results: allResults, files: files)
                 saveResults(allResults, files: files, engineDescs: engineDescs)
+                generateSRTFile(results: allResults, sourceURL: files[0])
 
                 if AppPreferences.shared.autoSummaryEnabled && llmConfigured { summarize() }
 
@@ -327,6 +329,41 @@ final class TranscriptionViewModel: ObservableObject {
         }
     }
 
+    private func generateSRTFile(results: [TranscriptionResult], sourceURL: URL) {
+        guard AppPreferences.shared.subtitleExportEnabled else { return }
+        let allSegments = results.compactMap { $0.segments }.flatMap { $0 }
+        guard !allSegments.isEmpty else { return }
+
+        let srtText = SubtitleFormatter.toSRT(allSegments)
+        guard !srtText.isEmpty else { return }
+
+        let resultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!.appendingPathComponent("VoiceGum/Result")
+        try? FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
+
+        let stem = sourceURL.deletingPathExtension().lastPathComponent
+        let langCode = languageSuffix(AppPreferences.shared.language)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        var ts = formatter.string(from: Date())
+        ts = ts.replacingOccurrences(of: ":", with: "")
+        let srtName = "\(stem).\(langCode)_\(ts).srt"
+        let srtURL = resultDir.appendingPathComponent(srtName)
+
+        try? srtText.write(to: srtURL, atomically: true, encoding: .utf8)
+    }
+
+    /// Map transcription language string to short filename suffix.
+    private func languageSuffix(_ language: String?) -> String {
+        guard let lang = language?.lowercased(), !lang.isEmpty else { return "und" }
+        if lang.hasPrefix("zh-cn") || lang == "zh" { return "chs" }
+        if lang.hasPrefix("zh-tw") || lang.hasPrefix("zh-hk") { return "cht" }
+        if lang.hasPrefix("en") { return "en" }
+        if lang.hasPrefix("ja") { return "ja" }
+        if lang.hasPrefix("ko") { return "ko" }
+        return lang.replacingOccurrences(of: "-", with: "_")
+    }
+
     private func saveResults(_ results: [TranscriptionResult], files: [URL], engineDescs: [String]) {
         let resultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!.appendingPathComponent("VoiceGum/Result")
@@ -359,6 +396,7 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     private func saveToHistory(results: [TranscriptionResult], files: [URL], engineDescs: [String], duration: TimeInterval?) async {
+        guard AppPreferences.shared.autoSaveHistory else { return }
         lastHistoryEntryIds = []
         for (index, result) in results.enumerated() {
             let fileName = files.indices.contains(index)
@@ -387,6 +425,33 @@ final class TranscriptionViewModel: ObservableObject {
         }
         let apiKey = AppPreferences.shared.llmAPIKey()
         await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
+    }
+
+    /// Present NSSavePanel for manual SRT subtitle export from a history entry.
+    static func exportSubtitles(entry: HistoryEntry) {
+        guard let segments = entry.segments, !segments.isEmpty else { return }
+
+        let srtContent = SubtitleFormatter.toSRT(segments)
+        guard !srtContent.isEmpty else { return }
+
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.plainText]
+        savePanel.nameFieldStringValue = (entry.sourceFileName as NSString).deletingPathExtension + ".srt"
+        savePanel.title = String(localized: "导出字幕")
+        savePanel.message = String(localized: "选择字幕文件的保存位置")
+
+        if savePanel.runModal() == .OK, let url = savePanel.url {
+            do {
+                try srtContent.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = String(localized: "字幕导出失败")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: String(localized: "确定"))
+                alert.runModal()
+            }
+        }
     }
 
     private func captureDuration(_ fileURL: URL) async -> TimeInterval? {

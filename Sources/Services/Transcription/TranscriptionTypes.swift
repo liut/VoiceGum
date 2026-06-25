@@ -1,16 +1,30 @@
 import Foundation
 
+public struct SubtitleSegment: Sendable, Codable {
+    public let text: String
+    public let startMs: Float
+    public let endMs: Float
+
+    public init(text: String, startMs: Float, endMs: Float) {
+        self.text = text
+        self.startMs = startMs
+        self.endMs = endMs
+    }
+}
+
 public struct TranscriptionResult: Sendable, Codable {
     public let text: String
     public let timestamps: [Float]?
     public let language: String?
     public let confidence: Float?
+    public let segments: [SubtitleSegment]?
 
-    public init(text: String, timestamps: [Float]? = nil, language: String? = nil, confidence: Float? = nil) {
+    public init(text: String, timestamps: [Float]? = nil, language: String? = nil, confidence: Float? = nil, segments: [SubtitleSegment]? = nil) {
         self.text = text
         self.timestamps = timestamps
         self.language = language
         self.confidence = confidence
+        self.segments = segments
     }
 }
 
@@ -24,6 +38,7 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
     public let rawText: String
     public let refinedText: String?
     public let summaryText: String?
+    public var segments: [SubtitleSegment]?
 
     public var displayText: String { refinedText ?? rawText }
 
@@ -37,7 +52,8 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
 
     public init(id: String = UUID().uuidString, sourceFileName: String, timestamp: Date,
                 engineDescription: String, language: String?, duration: TimeInterval?,
-                rawText: String, refinedText: String? = nil, summaryText: String? = nil) {
+                rawText: String, refinedText: String? = nil, summaryText: String? = nil,
+                segments: [SubtitleSegment]? = nil) {
         self.id = id
         self.sourceFileName = sourceFileName
         self.timestamp = timestamp
@@ -47,6 +63,7 @@ public struct HistoryEntry: Codable, Identifiable, Sendable {
         self.rawText = rawText
         self.refinedText = refinedText
         self.summaryText = summaryText
+        self.segments = segments
     }
 }
 
