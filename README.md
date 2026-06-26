@@ -22,7 +22,8 @@ A minimal macOS application that transcribes audio files to text using configura
 |------|--------|-------|-------|
 | Online | OpenAI | Whisper API (`whisper-1` / `whisper-large`) | OpenAI-compatible endpoints, API key in Keychain |
 | Online | Volcano Engine | Streaming ASR | ByteDance cloud API, requires App ID / Access Token / Resource ID |
-| Local | SenseVoice | GGUF (Q8_0 / FP16 / FP32) | In-process via ggml + Metal, auto-unloads after idle |
+| Local | SenseVoice | GGUF (Q8_0 / FP16 / FP32) | In-process via ggml + Metal, 5 languages, auto-unloads after idle |
+| Local | FunASR-Nano | GGUF (Encoder + Decoder) | End-to-end LLM-based ASR, 31 languages, Qwen3-0.6B decoder |
 
 Local models are downloaded on demand from **HuggingFace** (primary) and **ModelScope** (mirror), with resume support for interrupted downloads.
 
@@ -48,6 +49,9 @@ cat audio.mp3 | voicegum-cli
 
 # Specify language and output file
 voicegum-cli audio.mp3 -l zh -o out.txt
+
+# Use FunASR-Nano for 31-language support
+voicegum-cli audio.mp3 --engine nano
 ```
 
 See `voicegum-cli --help` for full usage. Install with `make install-cli`.
@@ -96,6 +100,7 @@ Local models are stored in `~/Library/Application Support/VoiceGum/Models/<id>/`
 | SenseVoice Q8_0 | ~230 MB | Quantized |
 | SenseVoice FP16 | ~350 MB | Half-precision |
 | SenseVoice FP32 | ~700 MB | Full-precision |
+| FunASR-Nano | ~1.1 GB | Encoder FP16 + Decoder Q8_0 |
 
 Models are downloaded from HuggingFace on first use. They auto-unload 5s after transcription finishes to free memory.
 

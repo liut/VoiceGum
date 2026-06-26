@@ -31,7 +31,7 @@ VoiceGum/
 │   ├── Keychain/         # Keychain access for ASR API key
 │   ├── FnKey/            # Fn key detector
 │   ├── CAsrEngine/       # [DEPRECATED] Legacy SenseVoice engine
-│   ├── CFunASREngine/    # FunASR SenseVoice engine (ggml CPU, C++17)
+│   ├── CFunASREngine/    # FunASR engine: SenseVoice + FunASR-Nano (ggml + Metal, C++17)
 │   └── CZlib/            # Gzip helper for HTTP compression
 ├── Resources/            # GUI bundle resources (Info.plist, icons, assets)
 ├── Package.swift         # SPM manifest (VoiceGum + VoiceGumCLI products)
@@ -60,7 +60,7 @@ VoiceGum (Sources/App)
 
 ### Key Design Patterns
 
-- **TranscriptionService Protocol**: Unified interface for all ASR backends (`GGMLTranscriptionService`, `OnlineAPITranscription`, `VolcanoEngineASR`)
+- **TranscriptionService Protocol**: Unified interface for all ASR backends (`FunASRTranscriptionService`, `FunASRNanoTranscriptionService`, `GGMLTranscriptionService`, `OnlineAPITranscription`, `VolcanoEngineASR`)
 - **TranscriptionState Enum**: State machine driving the UI (`idle → validating → queued → preparing → transcribing → refining → completed | failed | cancelled`)
 - **Actor-based LLMClient**: Thread-safe singleton with provider-specific request builders (OpenAI, Anthropic, Ollama)
 - **Actor-based ModelDownloadManager**: Resume-capable downloads with progress callbacks
@@ -86,12 +86,11 @@ VoiceGum (Sources/App)
 
 ## Known Quirks
 
-- **ggml Metal exclusivity**: Only one Metal backend per process. ASR engine uses ggml Metal; adding another Metal consumer (MLX, separate llama.cpp) will crash.
+- **ggml Metal exclusivity**: Only one Metal backend per process. Encoder creates + frees its backend before LLM init to avoid conflict. Adding another Metal consumer (MLX, separate llama.cpp) will crash.
 - **Model lifecycle**: `GGMLTranscriptionService` auto-unloads after 5s idle. Call `invalidateActiveModel()` before switching models.
 - **UserDefaults keys**: `voicegum.` prefix, dot-separated. Per-provider: `voicegum.llm.<provider>.<field>`.
 - **ASR API key**: Keychain. **LLM API keys**: UserDefaults.
 - **`CFunASREngine` uses `unsafeFlags`** — SPM can't express C++17 + header paths natively. Expected.
-- **ggml Metal exclusivity**: Only one Metal backend per process. Phase 1 uses CPU-only ggml; Metal to be added in Phase 2.
 - **`Sources/UI/`** — empty directories, no SPM target. Dead code.
 - **`_exit(0)` in AppDelegate + CLI**: Bypasses ggml Metal static destructor crash. Don't replace with normal `exit()`.
 - **`Logger` writes to stderr**: Both GUI console and CLI stderr — intentional, keeps stdout clean for CLI pipe output.
