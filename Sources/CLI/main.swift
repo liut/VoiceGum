@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import VoiceGumServices
+import CFunASREngine
 
 // MARK: - Usage
 
@@ -14,6 +15,7 @@ func printUsage() {
           -m, --model <id>     Model directory name (default: first available)
           -l, --language <code> Language: zh, en, ja, ko, auto (default: auto)
           -o, --output <path>  Write text to file instead of stdout
+          -e, --engine <id>    ASR engine: funasr (default) or legacy
           -h, --help           Print this help
 
         Examples:
@@ -32,6 +34,7 @@ struct CLIArgs {
     var language = "auto"
     var outputPath: String?
     var inputFile: String?
+    var engine = "funasr"
     var showHelp = false
 }
 
@@ -55,6 +58,10 @@ func parseArgs(_ args: [String]) -> CLIArgs? {
             i += 1
             guard i < args.count else { fputs("voicegum-cli: -o requires a value\n", stderr); return nil }
             parsed.outputPath = args[i]
+        case "-e", "--engine":
+            i += 1
+            guard i < args.count else { fputs("voicegum-cli: -e requires a value\n", stderr); return nil }
+            parsed.engine = args[i]
         default:
             if arg.hasPrefix("-") {
                 fputs("voicegum-cli: unknown option \(arg)\n", stderr)
@@ -174,18 +181,39 @@ struct VoiceGumCLI {
         let isTempFile = args.inputFile == nil
         defer { if isTempFile { try? FileManager.default.removeItem(at: audioFile) } }
 
-        let service = GGMLTranscriptionService(modelId: modelID)
-
+        let isFunASR = args.engine == "funasr"
+        let isNano = args.engine == "nano"
         let result: TranscriptionResult
         do {
-            result = try await service.transcribe(file: audioFile, language: args.language)
+            if isNano {
+                // Direct nano C API call for testing
+                let encPath = ProcessInfo.processInfo.environment["NANO_ENC"] ?? "/tmp/funasr-nano-models/funasr-encoder-f16.gguf"
+                let llmPath = ProcessInfo.processInfo.environment["NANO_LLM"] ?? "/tmp/funasr-nano-models/Fun-ASR-Nano-Decoder.q8_0.gguf"
+                guard let h = nano_load_model(encPath, llmPath, Int32(ProcessInfo.processInfo.activeProcessorCount)) else {
+                    throw CLIError.transcriptionFailed("Nano model load failed")
+                }
+                defer { nano_free(h) }
+                guard let cText = nano_transcribe(h, audioFile.path, Int32(ProcessInfo.processInfo.activeProcessorCount)) else {
+                    throw CLIError.transcriptionFailed("Nano transcription failed")
+                }
+                let text = String(cString: cText)
+                free(cText)
+                result = TranscriptionResult(text: text, language: args.language)
+            } else if isFunASR {
+                let service = FunASRTranscriptionService(modelId: modelID)
+                result = try await service.transcribe(file: audioFile, language: args.language)
+                service.unload()
+            } else {
+                let service = GGMLTranscriptionService(modelId: modelID)
+                result = try await service.transcribe(file: audioFile, language: args.language)
+                GGMLTranscriptionService.invalidateActiveModel()
+            }
         } catch {
             fputs("voicegum-cli: \(CLIError.transcriptionFailed(error.localizedDescription).description)\n", stderr)
             GGMLTranscriptionService.invalidateActiveModel()
+            FunASRTranscriptionService.invalidateActiveModel()
             _exit(1)
         }
-
-        GGMLTranscriptionService.invalidateActiveModel()
 
         if let outputPath = args.outputPath {
             do {

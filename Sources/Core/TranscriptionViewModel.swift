@@ -58,9 +58,19 @@ final class TranscriptionViewModel: ObservableObject {
             return
         }
         guard isModelDownloaded(model.id) else { return }
-        let svc = GGMLTranscriptionService(modelId: model.id)
-        try? svc.loadModel()
-        transcriptionService = svc
+        if model.id.hasPrefix("funasr-nano") {
+            let svc = FunASRNanoTranscriptionService(modelId: model.id)
+            try? svc.loadModel()
+            transcriptionService = svc
+        } else if AppPreferences.shared.asrEngine == "funasr" {
+            let svc = FunASRTranscriptionService(modelId: model.id)
+            try? svc.loadModel()
+            transcriptionService = svc
+        } else {
+            let svc = GGMLTranscriptionService(modelId: model.id)
+            try? svc.loadModel()
+            transcriptionService = svc
+        }
     }
 
     private func setupTranscriptionService() async {

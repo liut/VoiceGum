@@ -1,13 +1,13 @@
 import Foundation
 import CFunASREngine
 
-public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionService {
-    public let serviceName = "SenseVoice"
+public final class FunASRTranscriptionService: @unchecked Sendable, TranscriptionService {
+    public let serviceName = "FunASR (SenseVoice)"
     public let modelId: String
 
     public var onProgress: ((Double) -> Void)?
 
-    private nonisolated(unsafe) static weak var activeInstance: GGMLTranscriptionService?
+    private nonisolated(unsafe) static weak var activeInstance: FunASRTranscriptionService?
 
     private let stateLock = NSLock()
     private var svHandle: UnsafeMutableRawPointer?
@@ -32,23 +32,16 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         activeInstance = nil
     }
 
-    /// Poll until the active transcription finishes, or the timeout expires.
-    /// Returns `true` if transcription completed, `false` on timeout.
-    /// Called during app termination — a bounded wait prevents the app from
-    /// appearing frozen when a long transcription is in flight.
     public static func waitForTranscriptionCompletion(timeout: TimeInterval) async -> Bool {
         guard let instance = activeInstance else { return true }
         let deadline = ContinuousClock.now + .seconds(timeout)
         while instance.syncIsTranscribing {
-            if ContinuousClock.now > deadline {
-                return false
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            if ContinuousClock.now > deadline { return false }
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
         return true
     }
 
-    /// Thread-safe synchronous check, usable from async contexts.
     private var syncIsTranscribing: Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -71,7 +64,8 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         }
 
         let ggufPath = modelDir.appendingPathComponent(ggufFile).path
-        guard let h = sv_load_model(ggufPath, 1) else {
+        // Phase 1 CPU-only: use_gpu = 0
+        guard let h = sv_load_model(ggufPath, 0) else {
             throw TranscriptionError.transcriptionFailed("加载 SenseVoice 模型失败")
         }
         svHandle = h
@@ -86,7 +80,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
         setTranscribing(true)
         defer { setTranscribing(false) }
 
-        await Logger.shared.info("SenseVoice 转写: model=\(modelId), file=\(file.lastPathComponent)")
+        await Logger.shared.info("FunASR 转写: model=\(modelId), file=\(file.lastPathComponent)")
 
         let wavFile = try await AudioConverter.convertTo16kHzWav(file)
         defer { try? FileManager.default.removeItem(at: wavFile) }
@@ -95,7 +89,7 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
 
         let makeProgress: (@convention(c) (Float, UnsafeMutableRawPointer?) -> Void) = { pct, userdata in
             guard let ptr = userdata else { return }
-            let svc = Unmanaged<GGMLTranscriptionService>.fromOpaque(ptr).takeUnretainedValue()
+            let svc = Unmanaged<FunASRTranscriptionService>.fromOpaque(ptr).takeUnretainedValue()
             DispatchQueue.main.async {
                 svc.onProgress?(Double(pct))
             }
@@ -117,7 +111,6 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
                     }
                 }()
 
-                // Try segmented transcription first
                 let segResult = sv_transcribe_segments(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
 
                 if segResult.count > 0, let segsPtr = segResult.segments {
@@ -134,12 +127,10 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
                     sv_free_result(segResult)
                     continuation.resume(returning: TranscriptionResult(text: combinedText, language: detectedLanguage, segments: segments))
                 } else {
-                    // No segments — free result and fall back to text-only transcription
                     sv_free_result(segResult)
-
                     let result = sv_transcribe(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
                     guard let r = result else {
-                        continuation.resume(throwing: TranscriptionError.transcriptionFailed("SenseVoice 转写返回空"))
+                        continuation.resume(throwing: TranscriptionError.transcriptionFailed("FunASR 转写返回空"))
                         return
                     }
                     let t = String(cString: r)
@@ -149,16 +140,15 @@ public final class GGMLTranscriptionService: @unchecked Sendable, TranscriptionS
             }
         }
 
-        await Logger.shared.info("SenseVoice 完成: \(transcriptionResult.text)")
+        await Logger.shared.info("FunASR 完成: \(transcriptionResult.text)")
         return transcriptionResult
     }
 
     public func unload() {
         cancelUnloadTimer()
         stateLock.lock()
-        let isActive = isTranscribing
         let h: UnsafeMutableRawPointer?
-        if !isActive {
+        if !isTranscribing {
             h = svHandle
             svHandle = nil
         } else {

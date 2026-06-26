@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import CAsrEngine
+import CFunASREngine
 import VoiceGumCore
 import VoiceGumServices
 import Darwin
@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        asr_engine_init()
+        funasr_engine_init()
         Task { _ = await Logger.shared.getLogPath() }
     }
 
@@ -26,23 +26,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Cancel in-flight async tasks so the transcription loop exits.
         NotificationCenter.default.post(name: .voiceGumWillTerminate, object: nil)
 
-        guard GGMLTranscriptionService.isTranscribingActive else {
-            // Not transcribing — free the model now so ggml's C++ static
-            // destructors (which run during exit()) find clean Metal state.
+        let anyActive = GGMLTranscriptionService.isTranscribingActive
+                     || FunASRTranscriptionService.isTranscribingActive
+        guard anyActive else {
             GGMLTranscriptionService.invalidateActiveModel()
+            FunASRTranscriptionService.invalidateActiveModel()
             return .terminateNow
         }
 
-        // Transcription is in progress — wait briefly for it to finish so
-        // we can safely free the model before exit. If it doesn't finish
-        // within the timeout, skip sv_free and let _exit() reclaim everything;
-        // the OS recovers GPU resources just fine and _exit bypasses static
-        // destructors, so there is no crash risk.
         Task { @MainActor in
             let completed = await GGMLTranscriptionService.waitForTranscriptionCompletion(timeout: 5)
-            if completed {
-                GGMLTranscriptionService.invalidateActiveModel()
-            }
+            let completed2 = await FunASRTranscriptionService.waitForTranscriptionCompletion(timeout: 5)
+            if completed { GGMLTranscriptionService.invalidateActiveModel() }
+            if completed2 { FunASRTranscriptionService.invalidateActiveModel() }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

@@ -37,7 +37,7 @@ let package = Package(
         ),
         .target(
             name: "VoiceGumServices",
-            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CZlib", "CAsrEngine"],
+            dependencies: ["VoiceGumPreferences", "VoiceGumKeychain", "CZlib", "CFunASREngine"],
             path: "Sources/Services"
         ),
         .target(
@@ -84,6 +84,43 @@ let package = Package(
             ]
         ),
         .target(
+            name: "CFunASREngine",
+            path: "Sources/CFunASREngine",
+            sources: [
+                "funasr_adapter.cpp",
+                "format_detect.cpp",
+                "funasr-nano-encoder.cpp",
+                "funasr-nano-llm.cpp",
+                "funasr-nano-vad.cpp",
+                "funasr-nano-adapter.cpp",
+                "common.cc",
+                "sense-voice.cc",
+                "sense-voice-encoder.cc",
+                "sense-voice-decoder.cc",
+                "sense-voice-frontend.cc",
+                "silero-vad.cc",
+                "fftsg.cc",
+            ],
+            publicHeadersPath: "include",
+            cxxSettings: [
+                .unsafeFlags(["-fno-modules", "-std=c++17",
+                              "-I", "Sources/CFunASREngine/private_headers",
+                              "-Wno-unused-command-line-argument"]),
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-L", "Sources/CFunASREngine/libs",
+                    "-L", "/opt/local/lib/libomp",
+                    "-lllama",
+                    "-lggml", "-lggml-base", "-lggml-cpu", "-lggml-metal", "-lggml-blas",
+                    "-lomp", "-lc++",
+                ]),
+                .linkedFramework("Metal"),
+                .linkedFramework("Foundation"),
+                .linkedFramework("Accelerate"),
+            ]
+        ),
+        .target(
             name: "VoiceGumPreferences",
             dependencies: [],
             path: "Sources/Preferences"
@@ -97,6 +134,12 @@ let package = Package(
             name: "VoiceGumFnKey",
             dependencies: [],
             path: "Sources/FnKey"
+        ),
+        .testTarget(
+            name: "CFunASREngineTests",
+            dependencies: ["CFunASREngine"],
+            path: "Tests/CFunASREngineTests",
+            cxxSettings: [.unsafeFlags(["-fno-modules"])]
         ),
     ],
     swiftLanguageModes: [.v6]

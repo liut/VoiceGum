@@ -51,6 +51,10 @@ struct ASRSettingsTab: View {
             description: "多语言识别 · 中文/英文/粤语/日语/韩语 · Metal加速",
             tags: ["本地", "GPU", "GGUF"],
             models: allModels.filter { $0.id.hasPrefix("sense-voice") }),
+        ModelFamily(id: "funasr-nano", name: "FunASR-Nano", icon: "brain.head.profile",
+            description: "端到端 31 语言 · Qwen3 0.6B 解码器 · Metal 加速 · 中日英韩粤",
+            tags: ["本地", "GPU", "GGUF", "LLM"],
+            models: allModels.filter { $0.id.hasPrefix("funasr-nano") }),
     ]
 
     var body: some View {

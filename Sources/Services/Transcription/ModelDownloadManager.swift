@@ -292,6 +292,13 @@ public let allModels: [ModelInfo] = [
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp32.gguf"]
     ),
+    ModelInfo(
+        id: "funasr-nano", displayName: "FunASR-Nano (31语言)",
+        fileSize: 1_100_000_000, sizeLabel: "~1.1 GB",
+        hfRepo: "FunAudioLLM/Fun-ASR-Nano",
+        msRepo: "",
+        hfFiles: ["funasr-encoder-f16.gguf", "Fun-ASR-Nano-Decoder.q8_0.gguf"]
+    ),
 ]
 
 
