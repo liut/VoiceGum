@@ -11,8 +11,8 @@ make clean                       # rm -rf .build build
 ```
 
 - **SDKROOT**: If you see missing `MacOSX26.4.sdk`, unset SDKROOT or point to `xcrun --show-sdk-path`.
-- **C++ compilation**: `CAsrEngine` uses `-fno-modules` to bypass Clang module errors from Xcode 26.5 SDK headers. Don't remove it.
-- **Pre-built static libs**: `Sources/CAsrEngine/libs/libggml*.a` are Apple Silicon builds. Rebuild from llama.cpp if adding a new backend.
+- **C++ compilation**: `CFunASREngine` uses `-fno-modules` to bypass Clang module errors from Xcode 26.5 SDK headers. Don't remove it.
+- **Pre-built static libs**: `Sources/CFunASREngine/libs/libggml*.a` are Apple Silicon builds. Rebuild via `make funasr-libs` if updating llama.cpp.
 
 ## Architecture
 
@@ -30,7 +30,8 @@ VoiceGum/
 │   ├── Preferences/      # UserDefaults wrapper
 │   ├── Keychain/         # Keychain access for ASR API key
 │   ├── FnKey/            # Fn key detector
-│   ├── CAsrEngine/       # SenseVoice ASR engine (ggml + Metal, C++17)
+│   ├── CAsrEngine/       # [DEPRECATED] Legacy SenseVoice engine
+│   ├── CFunASREngine/    # FunASR SenseVoice engine (ggml CPU, C++17)
 │   └── CZlib/            # Gzip helper for HTTP compression
 ├── Resources/            # GUI bundle resources (Info.plist, icons, assets)
 ├── Package.swift         # SPM manifest (VoiceGum + VoiceGumCLI products)
@@ -45,7 +46,7 @@ VoiceGumCLI (Sources/CLI)
        ├─ VoiceGumPreferences
        ├─ VoiceGumKeychain
        ├─ CZlib (C, links libz)
-       └─ CAsrEngine (C++17, links libggml*.a + Metal)
+       └─ CFunASREngine (C++17, links libggml*.a + OpenMP)
 
 VoiceGum (Sources/App)
   └─ VoiceGumCore (Sources/Core)
@@ -89,7 +90,8 @@ VoiceGum (Sources/App)
 - **Model lifecycle**: `GGMLTranscriptionService` auto-unloads after 5s idle. Call `invalidateActiveModel()` before switching models.
 - **UserDefaults keys**: `voicegum.` prefix, dot-separated. Per-provider: `voicegum.llm.<provider>.<field>`.
 - **ASR API key**: Keychain. **LLM API keys**: UserDefaults.
-- **`CAsrEngine` uses `unsafeFlags`** — SPM can't express C++17 + header paths natively. Expected.
+- **`CFunASREngine` uses `unsafeFlags`** — SPM can't express C++17 + header paths natively. Expected.
+- **ggml Metal exclusivity**: Only one Metal backend per process. Phase 1 uses CPU-only ggml; Metal to be added in Phase 2.
 - **`Sources/UI/`** — empty directories, no SPM target. Dead code.
 - **`_exit(0)` in AppDelegate + CLI**: Bypasses ggml Metal static destructor crash. Don't replace with normal `exit()`.
 - **`Logger` writes to stderr**: Both GUI console and CLI stderr — intentional, keeps stdout clean for CLI pipe output.

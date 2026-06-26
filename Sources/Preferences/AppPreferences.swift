@@ -18,6 +18,7 @@ public final class AppPreferences: @unchecked Sendable {
     private enum Keys {
         static let language = "voicegum.language"
         static let asrProvider = "voicegum.asrProvider"
+        static let asrEngine = "voicegum.asrEngine"
         static let asrModel = "voicegum.asrModel"
         static let asrAPIURL = "voicegum.asrAPIURL"
         static let onlineASRService = "voicegum.onlineASRService"
@@ -58,6 +59,12 @@ public final class AppPreferences: @unchecked Sendable {
     public var asrProvider: String {
         get { defaults.string(forKey: Keys.asrProvider) ?? "online" }
         set { defaults.set(newValue, forKey: Keys.asrProvider) }
+    }
+
+    /// Local ASR engine: "legacy" (CAsrEngine) or "funasr" (CFunASREngine)
+    public var asrEngine: String {
+        get { defaults.string(forKey: Keys.asrEngine) ?? "legacy" }
+        set { defaults.set(newValue, forKey: Keys.asrEngine) }
     }
 
     public var asrModel: String {
