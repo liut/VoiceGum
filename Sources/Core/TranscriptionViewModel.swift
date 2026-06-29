@@ -12,10 +12,15 @@ final class TranscriptionViewModel: ObservableObject {
     @Published var statusMessage: String = ""
     @Published var summaryText: String?
     @Published var isSummarizing = false
+    @Published var isRefining = false
+
+    var refineDisabled: Bool { hasRefined || isRefining }
 
     private var transcriptionService: TranscriptionService?
     private var currentTask: Task<Void, Never>?
     private var summarizeTask: Task<Void, Never>?
+    private var refineTask: Task<Void, Never>?
+    private var hasRefined = false
     private var lastHistoryEntryIds: [String] = []
     private var transcriptionDuration: TimeInterval?
     private var targetProgress: Double = 0
@@ -40,6 +45,7 @@ final class TranscriptionViewModel: ObservableObject {
         stopProgressTimer()
         currentTask?.cancel()
         summarizeTask?.cancel()
+        refineTask?.cancel()
     }
 
     @objc private func handleOpenFile(_ notification: Notification) {
@@ -325,6 +331,7 @@ final class TranscriptionViewModel: ObservableObject {
         droppedFileURL = nil
         state = .idle
         summaryText = nil
+        hasRefined = false
     }
 
     func summarize() {
@@ -356,6 +363,43 @@ final class TranscriptionViewModel: ObservableObject {
                 summaryText = "摘要失败: \(error.localizedDescription)"
             }
             isSummarizing = false
+        }
+    }
+
+    func refine() {
+        guard case .completed(let results, let files) = state, !isRefining, !hasRefined else { return }
+        let baseURL = AppPreferences.shared.llmBaseURL()
+        guard !baseURL.isEmpty else { return }
+
+        isRefining = true
+        hasRefined = true
+
+        refineTask = Task {
+            do {
+                var refined: [TranscriptionResult] = []
+                for (index, result) in results.enumerated() {
+                    let prompt = AppPreferences.shared.refinePrompt
+                    let text = try await Task.detached(priority: .userInitiated) {
+                        try await LLMClient.shared.refine(
+                            text: result.text,
+                            customPrompt: prompt.isEmpty ? nil : prompt)
+                    }.value
+                    refined.append(TranscriptionResult(
+                        text: text,
+                        timestamps: result.timestamps,
+                        language: result.language,
+                        confidence: result.confidence))
+                    let id = lastHistoryEntryIds.indices.contains(index) ? lastHistoryEntryIds[index] : nil
+                    if let id {
+                        await HistoryManager.shared.updateRefinedText(id: id, refinedText: text)
+                    }
+                }
+                state = .completed(results: refined, files: files)
+                saveResults(refined, files: files, engineDescs: [])
+            } catch {
+                // keep original results on failure
+            }
+            isRefining = false
         }
     }
 

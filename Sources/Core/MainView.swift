@@ -63,6 +63,9 @@ public struct MainView: View {
                         results: results,
                         onCopy: { viewModel.copyToClipboard() },
                         onNew: { viewModel.reset() },
+                        onRefine: (!AppPreferences.shared.autoRefineEnabled && isLLMConfigured()) ? { viewModel.refine() } : nil,
+                        isRefining: viewModel.isRefining,
+                        refineDisabled: viewModel.refineDisabled,
                         onSummarize: isLLMConfigured() ? { viewModel.summarize() } : nil,
                         summaryText: viewModel.summaryText,
                         isSummarizing: viewModel.isSummarizing

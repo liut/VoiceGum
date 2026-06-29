@@ -130,6 +130,9 @@ struct ResultView: View {
     let results: [TranscriptionResult]
     let onCopy: () -> Void
     let onNew: () -> Void
+    let onRefine: (() -> Void)?
+    let isRefining: Bool
+    let refineDisabled: Bool
     let onSummarize: (() -> Void)?
     let summaryText: String?
     let isSummarizing: Bool
@@ -140,6 +143,20 @@ struct ResultView: View {
                 Text(String(localized: "转写结果"))
                     .font(.headline)
                 Spacer()
+                if onRefine != nil {
+                    if isRefining {
+                        HStack(spacing: 4) {
+                            ProgressView().scaleEffect(0.6)
+                            Text(String(localized: "润色中...")).font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Button(action: { onRefine?() }) {
+                            Label(String(localized: "润色"), systemImage: "wand.and.stars")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(refineDisabled)
+                    }
+                }
                 if onSummarize != nil {
                     if isSummarizing {
                         HStack(spacing: 4) {
