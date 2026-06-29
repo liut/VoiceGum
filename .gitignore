@@ -178,3 +178,5 @@ todos/
 *.local.*
 *.iconset/
 tests/
+
+VoiceGum.zip
