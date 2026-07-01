@@ -35,6 +35,8 @@ public final class AppPreferences: @unchecked Sendable {
         static let translatePrompt = "voicegum.llm.translatePrompt"
         static let languageSplitEnabled = "voicegum.llm.languageSplitEnabled"
         static let llamaCLIThreads = "voicegum.llm.llamacli.threads"
+        static let voiceInputTriggerKeyCode = "voicegum.voiceInput.triggerKeyCode"
+        static let voiceInputEnabled = "voicegum.voiceInput.enabled"
     }
 
     private init() {
@@ -105,6 +107,21 @@ public final class AppPreferences: @unchecked Sendable {
     public var autoSaveHistory: Bool {
         get { defaults.object(forKey: Keys.autoSaveHistory) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.autoSaveHistory) }
+    }
+
+    // MARK: - Voice Input
+
+    public var voiceInputEnabled: Bool {
+        get { defaults.object(forKey: Keys.voiceInputEnabled) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.voiceInputEnabled) }
+    }
+
+    public var voiceInputTriggerKeyCode: Int {
+        get {
+            let v = defaults.integer(forKey: Keys.voiceInputTriggerKeyCode)
+            return v > 0 ? v : 54 // Right Cmd
+        }
+        set { defaults.set(newValue, forKey: Keys.voiceInputTriggerKeyCode) }
     }
 
     // MARK: - LLM (global)

@@ -266,6 +266,8 @@ struct GeneralSettingsTab: View {
                 }
                 .padding()
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
+
+                VoiceInputSettingsSection()
             }
             .padding(16)
         }
@@ -278,6 +280,48 @@ struct GeneralSettingsTab: View {
             translateOutput = AppPreferences.shared.translateOutputMode
             languageSplit = AppPreferences.shared.languageSplitEnabled
         }
+    }
+}
+
+// MARK: - Voice Input Settings
+
+struct VoiceInputSettingsSection: View {
+    @State private var voiceInputEnabled = AppPreferences.shared.voiceInputEnabled
+    @State private var triggerKeyCode = AppPreferences.shared.voiceInputTriggerKeyCode
+
+    let keyOptions: [(Int, String)] = [
+        (63, "Fn / Globe"),
+        (61, "右 Option"),
+        (54, "右 Command"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $voiceInputEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "语音输入"))
+                    Text(String(localized: "按住触发键录音，松开后自动注入文字"))
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }
+            .onChange(of: voiceInputEnabled) {
+                AppPreferences.shared.voiceInputEnabled = voiceInputEnabled
+            }
+
+            if voiceInputEnabled {
+                Picker(String(localized: "触发键"), selection: $triggerKeyCode) {
+                    ForEach(keyOptions, id: \.0) { key in
+                        Text(key.1).tag(key.0)
+                    }
+                }
+                .onChange(of: triggerKeyCode) {
+                    AppPreferences.shared.voiceInputTriggerKeyCode = triggerKeyCode
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.controlBackgroundColor)))
     }
 }
 

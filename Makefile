@@ -38,18 +38,24 @@ bundle: build
 
 run-app: bundle
 	pkill -f VoiceGum 2>/dev/null || true
-	codesign --sign - --force $(RELEASE_APP_PATH)
+	codesign --sign - --force --entitlements Resources/VoiceGum.entitlements $(RELEASE_APP_PATH)
 	open $(RELEASE_APP_PATH)
 
 sign: bundle
+	@echo "DEVELOPER_ID = [$(DEVELOPER_ID)]"
 	@if [ -z "$(DEVELOPER_ID)" ]; then \
 		echo "No Developer ID cert, using ad-hoc sign for local use"; \
-		codesign --sign - --force $(RELEASE_APP_PATH); \
+		codesign --sign - --force $(RELEASE_APP_PATH)/Contents/Frameworks/libomp.dylib; \
+		codesign --sign - --force --entitlements Resources/VoiceGum.entitlements $(RELEASE_APP_PATH); \
 	else \
-		codesign --force --sign "$(DEVELOPER_ID)" --options runtime $(RELEASE_APP_PATH); \
+		codesign --force --sign "$(DEVELOPER_ID)" --options runtime --timestamp $(RELEASE_APP_PATH)/Contents/Frameworks/libomp.dylib; \
+		codesign --force --sign "$(DEVELOPER_ID)" --options runtime --timestamp --entitlements Resources/VoiceGum.entitlements $(RELEASE_APP_PATH); \
 	fi
 
 notarize: sign
+	@if [ -z "$(DEVELOPER_ID)" ]; then \
+		echo "No Developer ID cert found — cannot notarize with ad-hoc signing."; exit 1; \
+	fi
 	@if ! xcrun notarytool history --keychain-profile "$(NOTARY_PROFILE)" >/dev/null 2>&1; then \
 		echo "Notary profile not found. Set it up first:"; \
 		echo "  xcrun notarytool store-credentials \"$(NOTARY_PROFILE)\""; \
