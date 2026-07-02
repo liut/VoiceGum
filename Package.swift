@@ -24,7 +24,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "VoiceGum",
-            dependencies: ["VoiceGumCore", "VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey"],
+            dependencies: ["VoiceGumCore", "VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey", "VoiceGumVoiceInput"],
             path: "Sources/App",
             resources: [
                 .process("Resources"),
@@ -32,7 +32,7 @@ let package = Package(
         ),
         .target(
             name: "VoiceGumCore",
-            dependencies: ["VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey"],
+            dependencies: ["VoiceGumServices", "VoiceGumPreferences", "VoiceGumKeychain", "VoiceGumFnKey", "VoiceGumVoiceInput"],
             path: "Sources/Core"
         ),
         .target(
@@ -134,6 +134,11 @@ let package = Package(
             name: "VoiceGumFnKey",
             dependencies: [],
             path: "Sources/FnKey"
+        ),
+        .target(
+            name: "VoiceGumVoiceInput",
+            dependencies: ["VoiceGumServices", "VoiceGumFnKey", "VoiceGumPreferences"],
+            path: "Sources/VoiceInput"
         ),
         .testTarget(
             name: "CFunASREngineTests",

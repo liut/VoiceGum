@@ -3,6 +3,9 @@ import SwiftUI
 import CFunASREngine
 import VoiceGumCore
 import VoiceGumServices
+import VoiceGumPreferences
+import VoiceGumVoiceInput
+import VoiceGumFnKey
 import Darwin
 
 @MainActor
@@ -20,6 +23,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         funasr_engine_init()
         Task { _ = await Logger.shared.getLogPath() }
+        _ = VoiceInputViewModel.shared
+
+        if AppPreferences.shared.voiceInputEnabled {
+            FnKeyDetector.shared.start()
+            let tapOk = FnKeyDetector.shared.isTapActive
+
+            if tapOk {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let alert = NSAlert()
+                    alert.messageText = "语音输入已就绪"
+                    alert.informativeText = "按住触发键开始录音，松开后自动注入文字。首次使用时会提示语音识别和麦克风权限。"
+                    alert.addButton(withTitle: "知道了")
+                    alert.runModal()
+                }
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let alert = NSAlert()
+                    alert.messageText = "语音输入需要辅助功能权限"
+                    alert.informativeText = "请前往 系统设置 → 隐私与安全性 → 辅助功能，添加并勾选 VoiceGum，然后重新启动应用。"
+                    alert.addButton(withTitle: "打开系统设置")
+                    alert.addButton(withTitle: "稍后")
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    }
+                }
+            }
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

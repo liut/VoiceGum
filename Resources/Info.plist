@@ -32,6 +32,8 @@
     <string>NSApplication</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>VoiceGum needs microphone access for voice recording.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>VoiceGum needs speech recognition access for voice input transcription.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
