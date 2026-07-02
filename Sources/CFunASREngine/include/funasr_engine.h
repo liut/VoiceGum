@@ -65,6 +65,10 @@ void nano_free(void * handle);
 // Transcribe WAV file (blocking). Returns malloced string.
 char * nano_transcribe(void * handle, const char * wav_path, int n_threads);
 
+// Transcribe WAV file with per-segment timing via internal VAD (blocking).
+// Returns sv_result — caller must free with sv_free_result().
+sv_result nano_transcribe_segments(void * handle, const char * wav_path, int n_threads);
+
 #ifdef __cplusplus
 }
 #endif

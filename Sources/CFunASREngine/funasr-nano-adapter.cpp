@@ -85,6 +85,71 @@ void nano_free(void * handle) {
     delete h;
 }
 
+sv_result nano_transcribe_segments(void * handle, const char * wav_path, int n_threads) {
+    auto * h = static_cast<NanoHandle *>(handle);
+    if (!h || !h->enc_loaded || !h->llm_loaded) {
+        sv_result empty = {nullptr, 0, nullptr};
+        return empty;
+    }
+
+    // Load audio
+    std::vector<float> wav;
+    if (!funasr_load_audio_16k_mono(wav_path, wav)) {
+        fprintf(stderr, "[nano] failed to load audio %s\n", wav_path);
+        sv_result empty = {nullptr, 0, nullptr};
+        return empty;
+    }
+
+    // VAD-based speech segmentation
+    int total_samples = (int)wav.size();
+    auto vad_segs = nano_vad_detect(wav, 16000);
+    if (vad_segs.empty()) {
+        vad_segs.push_back({0, total_samples});
+    }
+
+    const int max_chunk_samples = 30 * 16000;
+    std::vector<sv_segment> out_segs;
+
+    for (auto & seg : vad_segs) {
+        for (int start = seg.start_sample; start < seg.end_sample; start += max_chunk_samples) {
+            int end = start + max_chunk_samples;
+            if (end > seg.end_sample) end = seg.end_sample;
+            std::vector<float> seg_wav(wav.begin() + start, wav.begin() + end);
+
+            int T = 0;
+            auto fb = fbank_nano(seg_wav, T);
+            if (T < 1) continue;
+
+            int D_out = 0, n_aud = 0;
+            auto audio_embd = nano_encoder_run(h->enc, fb, T, 560, D_out, n_aud);
+            if (n_aud < 1) continue;
+
+            auto text = nano_llm_transcribe(h->llm, audio_embd, n_aud, D_out);
+            if (text.empty()) continue;
+
+            sv_segment sv_seg;
+            sv_seg.text = strdup(text.c_str());
+            sv_seg.t0_ms = start * 1000.0f / 16000.0f;
+            sv_seg.t1_ms = end * 1000.0f / 16000.0f;
+            out_segs.push_back(sv_seg);
+        }
+    }
+
+    if (out_segs.empty()) {
+        sv_result empty = {nullptr, 0, nullptr};
+        return empty;
+    }
+
+    sv_result result;
+    result.count = (int)out_segs.size();
+    result.segments = (sv_segment *)malloc(sizeof(sv_segment) * out_segs.size());
+    for (int i = 0; i < result.count; i++) {
+        result.segments[i] = out_segs[i];
+    }
+    result.language = nullptr;
+    return result;
+}
+
 char * nano_transcribe(void * handle, const char * wav_path, int n_threads) {
     auto * h = static_cast<NanoHandle *>(handle);
     if (!h || !h->enc_loaded || !h->llm_loaded) return strdup("");

@@ -99,13 +99,32 @@ public final class FunASRNanoTranscriptionService: @unchecked Sendable, Transcri
                     return
                 }
                 let nThreads = Int32(ProcessInfo.processInfo.activeProcessorCount)
-                guard let cText = nano_transcribe(h, wavFile.path, nThreads) else {
-                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("FunASR-Nano 转写返回空"))
-                    return
+
+                // Try segment-level transcription first (VAD-based timestamps)
+                let segResult = nano_transcribe_segments(h, wavFile.path, nThreads)
+                if segResult.count > 0, let segsPtr = segResult.segments {
+                    var segments: [SubtitleSegment] = []
+                    var textParts: [String] = []
+                    for i in 0..<Int(segResult.count) {
+                        let cSeg = segsPtr[i]
+                        let text = cSeg.text.map { String(cString: $0) } ?? ""
+                        segments.append(SubtitleSegment(text: text, startMs: cSeg.t0_ms, endMs: cSeg.t1_ms, language: language))
+                        textParts.append(text)
+                    }
+                    let combinedText = textParts.joined(separator: " ")
+                    sv_free_result(segResult)
+                    continuation.resume(returning: TranscriptionResult(text: combinedText, language: language, segments: segments))
+                } else {
+                    sv_free_result(segResult)
+                    // Fallback to plain text transcription
+                    guard let cText = nano_transcribe(h, wavFile.path, nThreads) else {
+                        continuation.resume(throwing: TranscriptionError.transcriptionFailed("FunASR-Nano 转写返回空"))
+                        return
+                    }
+                    let text = String(cString: cText)
+                    free(cText)
+                    continuation.resume(returning: TranscriptionResult(text: text, language: language))
                 }
-                let text = String(cString: cText)
-                free(cText)
-                continuation.resume(returning: TranscriptionResult(text: text, language: language))
             }
         }
 

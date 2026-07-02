@@ -239,7 +239,8 @@ final class TranscriptionViewModel: ObservableObject {
                     let capturedEntryIds = lastHistoryEntryIds
                     let capturedSummaryEnabled = AppPreferences.shared.autoSummaryEnabled
                     let capturedTranslate = translateEnabled
-                    let capturedOrigURL = generateSRTFile(results: capturedResults, sourceURL: capturedFiles[0])
+                    let capturedDuration = duration
+                    let capturedOrigURL = generateSRTFile(results: capturedResults, sourceURL: capturedFiles[0], duration: capturedDuration)
 
                     // Spawn translation as independent parallel task
                     if capturedTranslate {
@@ -283,7 +284,7 @@ final class TranscriptionViewModel: ObservableObject {
                 }
 
                 // Always generate original SRT first
-                let origURL = generateSRTFile(results: allResults, sourceURL: files[0])
+                let origURL = generateSRTFile(results: allResults, sourceURL: files[0], duration: duration)
 
                 // Translation-only (no refine)
                 if translateEnabled {
@@ -412,9 +413,18 @@ final class TranscriptionViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func generateSRTFile(results: [TranscriptionResult], sourceURL: URL) -> URL? {
+    private func generateSRTFile(results: [TranscriptionResult], sourceURL: URL, duration: TimeInterval? = nil) -> URL? {
         guard AppPreferences.shared.subtitleExportEnabled else { return nil }
-        let allSegments = results.compactMap { $0.segments }.flatMap { $0 }
+        var allSegments = results.compactMap { $0.segments }.flatMap { $0 }
+
+        // Fallback: when ASR engine doesn't provide timestamped segments (e.g. FunASR-Nano),
+        // create a single segment covering the full audio duration
+        if allSegments.isEmpty, let dur = duration, dur > 0 {
+            let combinedText = results.map { $0.text }.joined(separator: " ")
+            guard !combinedText.isEmpty else { return nil }
+            allSegments = [SubtitleSegment(text: combinedText, startMs: 0, endMs: Float(dur * 1000))]
+        }
+
         guard !allSegments.isEmpty else { return nil }
 
         let srtText = SubtitleFormatter.toSRT(allSegments)
@@ -430,11 +440,11 @@ final class TranscriptionViewModel: ObservableObject {
         formatter.formatOptions = [.withInternetDateTime]
         var ts = formatter.string(from: Date())
         ts = ts.replacingOccurrences(of: ":", with: "")
-        let srtName = "\(stem)_\(ts).\(langCode).srt"
-        let srtURL = resultDir.appendingPathComponent(srtName)
+        let origName = "\(stem)_\(ts)_orig.\(langCode).srt"
+        let origURL = resultDir.appendingPathComponent(origName)
+        try? srtText.write(to: origURL, atomically: true, encoding: .utf8)
 
-        try? srtText.write(to: srtURL, atomically: true, encoding: .utf8)
-        return srtURL
+        return nil
     }
 
     private func performTranslation(results: [TranscriptionResult], files: [URL],
