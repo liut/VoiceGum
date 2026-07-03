@@ -40,7 +40,7 @@ public enum LLMClientError: LocalizedError {
         switch self {
         case .notConfigured: return "LLM 未配置"
         case .requestFailed(let code, let body):
-            return "HTTP \(code): \(body.prefix(500))"
+            return "HTTP \(code): \(body.prefix(AppPreferences.logTruncationError))"
         case .decodeFailed(let detail):
             return "解析响应失败: \(detail)"
         case .networkFailed(let detail):
@@ -253,10 +253,10 @@ public actor LLMClient {
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "<empty>"
-            await Logger.shared.info("OpenAI 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            await Logger.shared.info("OpenAI 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(AppPreferences.logTruncationError))")
             throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
         }
-        await Logger.shared.info("OpenAI 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        await Logger.shared.info("OpenAI 响应: \(String(data: data, encoding: .utf8)?.prefix(AppPreferences.logTruncationSuccess) ?? "")")
         struct Resp: Decodable {
             let choices: [Choice]
             struct Choice: Decodable { let message: Msg; struct Msg: Decodable { let content: String } }
@@ -264,11 +264,11 @@ public actor LLMClient {
         do {
             let resp = try JSONDecoder().decode(Resp.self, from: data)
             let text = resp.choices.first?.message.content ?? userPrompt
-            await Logger.shared.info("OpenAI 测试成功: \(text.prefix(200))")
+            await Logger.shared.info("OpenAI 测试成功: \(text.prefix(AppPreferences.logTruncationSuccess))")
             return text
         } catch {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(500))")
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(AppPreferences.logTruncationError))")
         }
     }
 
@@ -307,10 +307,10 @@ public actor LLMClient {
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "<empty>"
-            await Logger.shared.info("Anthropic 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            await Logger.shared.info("Anthropic 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(AppPreferences.logTruncationError))")
             throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
         }
-        await Logger.shared.info("Anthropic 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        await Logger.shared.info("Anthropic 响应: \(String(data: data, encoding: .utf8)?.prefix(AppPreferences.logTruncationSuccess) ?? "")")
         struct AnthropicResp: Decodable {
             let content: [Block]
             struct Block: Decodable {
@@ -325,7 +325,7 @@ public actor LLMClient {
             return texts.isEmpty ? userPrompt : texts.joined(separator: "\n")
         } catch {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(300))")
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(AppPreferences.logTruncationError))")
         }
     }
 
@@ -360,21 +360,21 @@ public actor LLMClient {
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "<empty>"
-            await Logger.shared.info("Ollama 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(500))")
+            await Logger.shared.info("Ollama 错误响应: HTTP \(httpResponse.statusCode) body: \(body.prefix(AppPreferences.logTruncationError))")
             throw LLMClientError.requestFailed(statusCode: httpResponse.statusCode, body: body)
         }
-        await Logger.shared.info("Ollama 响应: \(String(data: data, encoding: .utf8)?.prefix(500) ?? "")")
+        await Logger.shared.info("Ollama 响应: \(String(data: data, encoding: .utf8)?.prefix(AppPreferences.logTruncationSuccess) ?? "")")
         struct OllamaResp: Decodable {
             let message: Msg
             struct Msg: Decodable { let content: String }
         }
         do {
             let result = try JSONDecoder().decode(OllamaResp.self, from: data).message.content
-            await Logger.shared.info("Ollama 测试成功: \(result.prefix(200))")
+            await Logger.shared.info("Ollama 测试成功: \(result.prefix(AppPreferences.logTruncationSuccess))")
             return result
         } catch {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(500))")
+            throw LLMClientError.decodeFailed("\(error.localizedDescription) body: \(body.prefix(AppPreferences.logTruncationError))")
         }
     }
 
@@ -418,7 +418,7 @@ public actor LLMClient {
             throw LLMClientError.networkFailed("llama-cli 返回空结果")
         }
 
-        await Logger.shared.info("llama-cli 完成: \(output.prefix(200))")
+        await Logger.shared.info("llama-cli 完成: \(output.prefix(AppPreferences.logTruncationSuccess))")
         return output
     }
 }

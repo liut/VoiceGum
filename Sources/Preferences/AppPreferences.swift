@@ -250,6 +250,23 @@ public final class AppPreferences: @unchecked Sendable {
 
     public static let defaultTranslatePrompt = "你是一个专业的字幕翻译助手。请将以下文本翻译为目标语言，保持口语化的表达风格，不要添加任何解释或额外内容，只输出翻译结果。"
 
+    // MARK: - Shared Constants
+
+    public static let timestampFormat = "yyyyMMdd_HHmmss"
+
+    /// 生成本地时区时间戳字符串
+    public static func makeTimestamp() -> String {
+        let df = DateFormatter()
+        df.dateFormat = timestampFormat
+        df.timeZone = TimeZone.current
+        return df.string(from: Date())
+    }
+
+    /// LLM 日志截断长度: 2xx 成功响应
+    public static let logTruncationSuccess = 510
+    /// LLM 日志截断长度: 4xx/5xx 错误 / decode 失败
+    public static let logTruncationError = 1020
+
     public func llmAPIKey(for provider: String? = nil) -> String {
         let p = provider ?? llmProvider
         return defaults.string(forKey: "voicegum.llm.\(p).apiKey") ?? ""

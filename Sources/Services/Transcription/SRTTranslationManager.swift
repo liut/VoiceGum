@@ -220,10 +220,7 @@ public final class SRTTranslationManager {
         let stem = source.deletingPathExtension().lastPathComponent
         let langCode = languageSuffix(targetLang)
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        var ts = formatter.string(from: Date())
-        ts = ts.replacingOccurrences(of: ":", with: "")
+        let ts = AppPreferences.makeTimestamp()
 
         let filename = "\(stem)_\(ts).\(langCode).srt"
         return dir.appendingPathComponent(filename)

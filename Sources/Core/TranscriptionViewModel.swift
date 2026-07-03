@@ -436,10 +436,7 @@ final class TranscriptionViewModel: ObservableObject {
 
         let stem = sourceURL.deletingPathExtension().lastPathComponent
         let langCode = languageSuffix(AppPreferences.shared.language)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        var ts = formatter.string(from: Date())
-        ts = ts.replacingOccurrences(of: ":", with: "")
+        let ts = AppPreferences.makeTimestamp()
         let origName = "\(stem)_\(ts)_orig.\(langCode).srt"
         let origURL = resultDir.appendingPathComponent(origName)
         try? srtText.write(to: origURL, atomically: true, encoding: .utf8)
@@ -604,10 +601,7 @@ final class TranscriptionViewModel: ObservableObject {
 
         let stem = sourceURL.deletingPathExtension().lastPathComponent
         let langCode = languageSuffix(targetLang)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        var ts = formatter.string(from: Date())
-        ts = ts.replacingOccurrences(of: ":", with: "")
+        let ts = AppPreferences.makeTimestamp()
 
         // Language split: group segments by language with index tracking,
         // then generate per-language SRT files (with translations when available).
@@ -717,9 +711,7 @@ final class TranscriptionViewModel: ObservableObject {
             .first!.appendingPathComponent("VoiceGum/Result")
         try? FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd-HHmmss"
-        let timestamp = dateFormatter.string(from: Date())
+        let timestamp = AppPreferences.makeTimestamp()
 
         for (index, result) in results.enumerated() {
             let fileName = files.indices.contains(index)

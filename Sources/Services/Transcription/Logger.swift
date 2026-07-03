@@ -1,4 +1,5 @@
 import Foundation
+import VoiceGumPreferences
 
 public actor Logger {
     public static let shared = Logger()
@@ -12,7 +13,7 @@ public actor Logger {
         let logDir = appSupport.appendingPathComponent("VoiceGum/Logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
 
-        let date = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let date = AppPreferences.makeTimestamp()
         logURL = logDir.appendingPathComponent("voicegum-\(date).log")
 
         dateFormatter = DateFormatter()

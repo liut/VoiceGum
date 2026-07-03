@@ -193,7 +193,7 @@ actor VoiceInputEngine {
     private func writeWAV() -> URL? {
         guard !accumulatedBuffers.isEmpty else { return nil }
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("voicegum_\(Int(Date().timeIntervalSince1970)).wav")
+            .appendingPathComponent("voicegum_\(AppPreferences.makeTimestamp()).wav")
         let total = accumulatedBuffers.reduce(0) { $0 + Int($1.frameLength) }
         guard total > 0 else { return nil }
         var samples = [Int16](repeating: 0, count: total)
