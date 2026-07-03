@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var preferencesWindow: NSWindow?
     private var historyWindow: NSWindow?
+    private var translationProgressWindow: NSWindow?
+    private var translationTask: Task<Void, Never>?
+    private var isTranslating: Bool { translationTask != nil }
 
     override init() {
         super.init()
@@ -147,5 +150,118 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         historyWindow = window
         window.makeKeyAndOrderFront(self)
+    }
+
+    // MARK: - SRT Translation
+
+    func translateSRTFile() {
+        guard !isTranslating else {
+            translationProgressWindow?.makeKeyAndOrderFront(self)
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let manager = SRTTranslationManager()
+        showTranslationProgress()
+
+        translationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let outputURL = try await manager.translate(file: url) { [weak self] current, total in
+                    guard let self else { return }
+                    Task { @MainActor in
+                        self.updateTranslationProgress(current: current, total: total)
+                    }
+                }
+                await MainActor.run {
+                    self.dismissTranslationProgress()
+                    self.showTranslationComplete(outputURL: outputURL)
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.dismissTranslationProgress()
+                }
+            } catch {
+                await MainActor.run {
+                    self.dismissTranslationProgress()
+                    self.showTranslationError(error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Translation Progress Window
+
+    private func showTranslationProgress() {
+        if translationProgressWindow == nil {
+            let progressView = TranslationProgressView(
+                onCancel: { [weak self] in
+                    self?.translationTask?.cancel()
+                }
+            )
+            let hostingController = NSHostingController(rootView: progressView)
+
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = String(localized: "翻译中...")
+            window.styleMask = [.titled, .closable]
+            window.setContentSize(NSSize(width: 360, height: 120))
+            window.center()
+            window.isReleasedWhenClosed = false
+
+            translationProgressWindow = window
+        }
+
+        // Reset progress display
+        if let progressView = (translationProgressWindow?.contentViewController as? NSHostingController<TranslationProgressView>) {
+            progressView.rootView = TranslationProgressView(
+                onCancel: { [weak self] in
+                    self?.translationTask?.cancel()
+                }
+            )
+        }
+
+        translationProgressWindow?.makeKeyAndOrderFront(self)
+    }
+
+    private func updateTranslationProgress(current: Int, total: Int) {
+        guard let window = translationProgressWindow,
+              let hosting = window.contentViewController as? NSHostingController<TranslationProgressView> else { return }
+        hosting.rootView = TranslationProgressView(
+            current: current,
+            total: total,
+            onCancel: { [weak self] in
+                self?.translationTask?.cancel()
+            }
+        )
+    }
+
+    private func dismissTranslationProgress() {
+        translationProgressWindow?.close()
+        translationTask = nil
+    }
+
+    private func showTranslationComplete(outputURL: URL) {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "翻译完成")
+        alert.informativeText = outputURL.path
+        alert.addButton(withTitle: String(localized: "在 Finder 中显示"))
+        alert.addButton(withTitle: String(localized: "确定"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.activateFileViewerSelecting([outputURL])
+        }
+    }
+
+    private func showTranslationError(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "翻译失败")
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: String(localized: "确定"))
+        alert.runModal()
     }
 }

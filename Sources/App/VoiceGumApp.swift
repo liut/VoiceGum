@@ -17,6 +17,10 @@ struct VoiceGumApp: App {
                     appDelegate.openFile()
                 }
                 .keyboardShortcut("o", modifiers: .command)
+                Button(String(localized: "翻译字幕文件...")) {
+                    appDelegate.translateSRTFile()
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .appInfo) {
                 Button(String(localized: "关于 VoiceGum")) {

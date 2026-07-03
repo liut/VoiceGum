@@ -424,6 +424,86 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Please enter model name" } },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル名を入力してください" } }
       }
+    },
+    "翻译字幕文件..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "翻译字幕文件..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "翻譯字幕檔案⋯" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translate Subtitles..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "字幕を翻訳⋯" } }
+      }
+    },
+    "翻译中..." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "翻译中..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "翻譯中⋯" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translating..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "翻訳中⋯" } }
+      }
+    },
+    "翻译完成" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "翻译完成" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "翻譯完成" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translation Complete" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "翻訳完了" } }
+      }
+    },
+    "在 Finder 中显示" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中显示" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中顯示" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in Finder" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Finder で表示" } }
+      }
+    },
+    "确定" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確定" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "OK" } }
+      }
+    },
+    "翻译失败" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "翻译失败" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "翻譯失敗" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translation Failed" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "翻訳失敗" } }
+      }
+    },
+    "正在翻译…" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在翻译…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在翻譯…" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translating…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "翻訳中…" } }
+      }
+    },
+    "文件中未找到有效字幕" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件中未找到有效字幕" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "檔案中未找到有效字幕" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No valid subtitles found in file" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ファイルに有効な字幕が見つかりません" } }
+      }
+    },
+    "无法解析该文件，请确认其为有效的 SRT 字幕文件" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法解析该文件，请确认其为有效的 SRT 字幕文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法解析該檔案，請確認其為有效的 SRT 字幕檔案" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to parse file — please verify it is a valid SRT subtitle file" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ファイルを解析できません。有効な SRT 字幕ファイルかご確認ください" } }
+      }
+    },
+    "请先在设置中配置 LLM" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先在设置中配置 LLM" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先在設定中配置 LLM" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please configure an LLM in Settings first" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初に設定で LLM を構成してください" } }
+      }
     }
   },
   "version" : "1.0"
