@@ -441,7 +441,7 @@ final class TranscriptionViewModel: ObservableObject {
         let origURL = resultDir.appendingPathComponent(origName)
         try? srtText.write(to: origURL, atomically: true, encoding: .utf8)
 
-        return nil
+        return origURL
     }
 
     private func performTranslation(results: [TranscriptionResult], files: [URL],
@@ -449,14 +449,9 @@ final class TranscriptionViewModel: ObservableObject {
                                       originalSRTURL: URL? = nil,
                                       onComplete: (@MainActor @Sendable () -> Void)? = nil) {
         let capturedResults = results
-        let capturedFiles = files
         let capturedEntryIds = entryIds
         let capturedTargetLang = targetLang
         let capturedOrigURL = originalSRTURL
-        let translateMode = AppPreferences.shared.translateMode
-        let outputMode = AppPreferences.shared.translateOutputMode
-        let splitEnabled = AppPreferences.shared.languageSplitEnabled
-        let exportEnabled = AppPreferences.shared.subtitleExportEnabled
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -467,58 +462,20 @@ final class TranscriptionViewModel: ObservableObject {
                     let normalizedTarget = normalizeLanguage(capturedTargetLang)
                     guard sourceLang != normalizedTarget else { continue }
 
-                    let prompt = AppPreferences.shared.translatePrompt
-                    let customPrompt = prompt.isEmpty ? nil : prompt
+                    // Delegate translation to SRTTranslationManager (batch, per-segment, TranslageGemma).
                     var translatedText = ""
                     var translatedSegments: [SubtitleSegment] = []
 
-                    if let segments = result.segments, !segments.isEmpty {
-                        if translateMode == .batch {
-                            let chunks = chunkSegments(segments)
-                            var allRawTexts: [String] = []
-                            var allTranslatedSegments: [SubtitleSegment] = []
-
-                            for chunk in chunks {
-                                var markedText = ""
-                                for (i, seg) in chunk {
-                                    markedText += "[SEGMENT \(i + 1)]\n\(seg.text)\n[/SEGMENT \(i + 1)]\n"
-                                }
-                                let instruction = "Keep the [SEGMENT N] and [/SEGMENT N] markers exactly as-is. Translate only the text between each marker pair — do not merge or reorder segments. Each output segment must correspond 1:1 to the input segment.\n\n"
-                                let raw = try await LLMClient.shared.translate(
-                                    text: instruction + markedText, targetLanguage: capturedTargetLang,
-                                    customPrompt: customPrompt)
-                                allRawTexts.append(raw)
-                                let parsed = parseTranslatedSegments(raw: raw, original: segments)
-                                allTranslatedSegments.append(contentsOf: parsed)
-                            }
-
-                            translatedText = allRawTexts.joined(separator: "\n\n")
-                            translatedSegments = allTranslatedSegments.sorted { $0.startMs < $1.startMs }
-                            if translatedSegments.isEmpty, !allRawTexts.isEmpty {
-                                translatedSegments = [SubtitleSegment(
-                                    text: allRawTexts.joined(separator: "\n\n"),
-                                    startMs: segments.first?.startMs ?? 0,
-                                    endMs: segments.last?.endMs ?? 0, language: capturedTargetLang)]
-                            }
-                        } else {
-                            var segResults: [SubtitleSegment] = []
-                            var allTexts: [String] = []
-                            for seg in segments {
-                                let translated = try await LLMClient.shared.translate(
-                                    text: seg.text, targetLanguage: capturedTargetLang,
-                                    customPrompt: customPrompt)
-                                segResults.append(SubtitleSegment(
-                                    text: translated, startMs: seg.startMs,
-                                    endMs: seg.endMs, language: capturedTargetLang))
-                                allTexts.append(translated)
-                            }
-                            translatedText = allTexts.joined(separator: "\n")
-                            translatedSegments = segResults
+                    if let srtURL = capturedOrigURL {
+                        let outputURL = try await SRTTranslationManager.shared.translate(file: srtURL) { _, _ in }
+                        if let content = try? String(contentsOf: outputURL, encoding: .utf8),
+                           let parsed = try? SRTParser.parse(content), !parsed.isEmpty {
+                            translatedSegments = parsed
+                            translatedText = parsed.map(\.text).joined(separator: "\n")
                         }
                     } else {
                         translatedText = try await LLMClient.shared.translate(
-                            text: result.text, targetLanguage: capturedTargetLang,
-                            customPrompt: customPrompt)
+                            text: result.text, targetLanguage: capturedTargetLang, customPrompt: nil)
                     }
 
                     let id = capturedEntryIds.indices.contains(index) ? capturedEntryIds[index] : nil
@@ -529,15 +486,6 @@ final class TranscriptionViewModel: ObservableObject {
                             translateTargetLanguage: capturedTargetLang)
                     }
 
-                    if exportEnabled, !capturedFiles.isEmpty {
-                        let sourceURL = capturedFiles.indices.contains(index) ? capturedFiles[index] : capturedFiles[0]
-                        await generateTranslatedSRT(
-                            original: result.segments ?? [],
-                            translated: translatedSegments,
-                            sourceURL: sourceURL, targetLang: capturedTargetLang,
-                            outputMode: outputMode, splitEnabled: splitEnabled,
-                            originalSRTURL: capturedOrigURL)
-                    }
                 }
             } catch {
                 await Logger.shared.error("Translation failed: \(error.localizedDescription)")
@@ -546,144 +494,7 @@ final class TranscriptionViewModel: ObservableObject {
         }
     }
 
-    private nonisolated let maxSegmentsPerChunk = 80
 
-    private nonisolated func chunkSegments(_ segments: [SubtitleSegment]) -> [[(Int, SubtitleSegment)]] {
-        var chunks: [[(Int, SubtitleSegment)]] = []
-        var current: [(Int, SubtitleSegment)] = []
-        for (i, seg) in segments.enumerated() {
-            current.append((i, seg))
-            if current.count >= maxSegmentsPerChunk {
-                chunks.append(current)
-                current = []
-            }
-        }
-        if !current.isEmpty { chunks.append(current) }
-        return chunks
-    }
-
-    /// Parse batch translation response back to segments by matching [SEGMENT N] markers.
-    private nonisolated func parseTranslatedSegments(raw: String, original: [SubtitleSegment]) -> [SubtitleSegment] {
-        var result: [SubtitleSegment] = []
-        for (i, seg) in original.enumerated() {
-            let openMarker = "[SEGMENT \(i + 1)]"
-            let closeMarker = "[/SEGMENT \(i + 1)]"
-            guard let openRange = raw.range(of: openMarker),
-                  let closeRange = raw.range(of: closeMarker),
-                  openRange.upperBound < closeRange.lowerBound else { continue }
-            var startIdx = openRange.upperBound
-            // Skip whitespace/newlines right after the open marker
-            while startIdx < closeRange.lowerBound, raw[startIdx].isNewline || raw[startIdx].isWhitespace {
-                startIdx = raw.index(after: startIdx)
-            }
-            var endIdx = closeRange.lowerBound
-            // Trim trailing whitespace/newlines before the close marker
-            while endIdx > startIdx {
-                let prev = raw.index(before: endIdx)
-                if raw[prev].isNewline || raw[prev].isWhitespace { endIdx = prev } else { break }
-            }
-            guard startIdx < endIdx else { continue }
-            let translatedText = String(raw[startIdx..<endIdx])
-            result.append(SubtitleSegment(text: translatedText, startMs: seg.startMs,
-                                          endMs: seg.endMs, language: seg.language))
-        }
-        return result
-    }
-
-    /// Generate translated SRT file(s) based on output mode and language split settings.
-    private func generateTranslatedSRT(original: [SubtitleSegment], translated: [SubtitleSegment],
-                                        sourceURL: URL, targetLang: String,
-                                        outputMode: TranslateOutputMode, splitEnabled: Bool,
-                                        originalSRTURL: URL? = nil) {
-        let resultDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!.appendingPathComponent("VoiceGum/Result")
-        try? FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
-
-        let stem = sourceURL.deletingPathExtension().lastPathComponent
-        let langCode = languageSuffix(targetLang)
-        let ts = AppPreferences.makeTimestamp()
-
-        // Language split: group segments by language with index tracking,
-        // then generate per-language SRT files (with translations when available).
-        if splitEnabled && !original.isEmpty {
-            var groups: [(lang: String, orig: [SubtitleSegment], trans: [SubtitleSegment])] = []
-            var groupMap: [String: (orig: [SubtitleSegment], trans: [SubtitleSegment])] = [:]
-            for (i, seg) in original.enumerated() {
-                let lang = seg.language ?? ""
-                if groupMap[lang] == nil { groupMap[lang] = ([], []) }
-                groupMap[lang]!.orig.append(seg)
-                if i < translated.count {
-                    groupMap[lang]!.trans.append(translated[i])
-                }
-            }
-            // Preserve original order of language appearance
-            var seen: Set<String> = []
-            for seg in original {
-                let lang = seg.language ?? ""
-                if seen.insert(lang).inserted, let g = groupMap[lang] {
-                    groups.append((lang, g.orig, g.trans))
-                }
-            }
-
-            for (lang, groupOrig, groupTrans) in groups {
-                let groupLang = lang.isEmpty ? langCode : languageSuffix(lang)
-                switch outputMode {
-                case .bilingual:
-                    let srtText = groupTrans.isEmpty
-                        ? SubtitleFormatter.toSRT(groupOrig)
-                        : SubtitleFormatter.toSRTBilingual(original: groupOrig, translated: groupTrans)
-                    guard !srtText.isEmpty else { continue }
-                    let srtName = "\(stem)_\(ts).\(groupLang).srt"
-                    // Single language: overwrite original; multi-language: separate per-language files
-                    let srtURL: URL
-                    if let origURL = originalSRTURL, groups.count == 1 {
-                        srtURL = origURL
-                    } else {
-                        srtURL = resultDir.appendingPathComponent(srtName)
-                    }
-                    try? srtText.write(to: srtURL, atomically: true, encoding: .utf8)
-                case .translationOnly:
-                    // Only write per-language original when multiple languages detected;
-                    // for single-language audio the unfiltered original from generateSRTFile suffices.
-                    if groups.count > 1 {
-                        let origSRT = SubtitleFormatter.toSRT(groupOrig)
-                        if !origSRT.isEmpty {
-                            let origName = "\(stem)_\(ts).\(groupLang).srt"
-                            try? origSRT.write(to: resultDir.appendingPathComponent(origName), atomically: true, encoding: .utf8)
-                        }
-                    }
-                    if !groupTrans.isEmpty {
-                        let transSRT = SubtitleFormatter.toSRT(groupTrans)
-                        if !transSRT.isEmpty {
-                            let transName = "\(stem)_\(ts).\(groupLang)_\(langCode).srt"
-                            try? transSRT.write(to: resultDir.appendingPathComponent(transName), atomically: true, encoding: .utf8)
-                        }
-                    }
-                }
-            }
-            return
-        }
-
-        // No language split — single SRT output
-        switch outputMode {
-        case .bilingual:
-            let srtText = SubtitleFormatter.toSRTBilingual(original: original, translated: translated)
-            guard !srtText.isEmpty else { return }
-            // Overwrite the original SRT file with bilingual version
-            let srtURL = originalSRTURL ?? resultDir.appendingPathComponent("\(stem)_\(ts).\(langCode).srt")
-            try? srtText.write(to: srtURL, atomically: true, encoding: .utf8)
-
-        case .translationOnly:
-            // Original SRT already exists from generateSRTFile — only write new translation file
-            let transSRT = SubtitleFormatter.toSRT(translated)
-            if !transSRT.isEmpty {
-                let transName = "\(stem)_\(ts).\(langCode).srt"
-                try? transSRT.write(to: resultDir.appendingPathComponent(transName), atomically: true, encoding: .utf8)
-            }
-        }
-    }
-
-    /// Normalize language codes so variants like "zh" and "zh-CN" are treated as equal.
     private nonisolated func normalizeLanguage(_ lang: String?) -> String {
         guard let lang = lang?.lowercased(), !lang.isEmpty else { return "und" }
         if lang.hasPrefix("zh-cn") || lang == "zh" { return "zh-CN" }

@@ -21,6 +21,8 @@ public enum SRTTranslationError: Error, LocalizedError {
 @MainActor
 public final class SRTTranslationManager {
 
+    public static let shared = SRTTranslationManager()
+
     private nonisolated let maxSegmentsPerChunk = 80
 
     public init() {}
