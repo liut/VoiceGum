@@ -12,24 +12,21 @@ public enum SubtitleFormatter {
         return formatSRT(split)
     }
 
-    /// Generate bilingual SRT: original text + translated text in each subtitle block.
+    /// Generate bilingual SRT: original + translated paired 1:1 without merge/split.
+    /// Merge/split is skipped because it can misalign the two sides when text lengths differ.
     public static func toSRTBilingual(original: [SubtitleSegment], translated: [SubtitleSegment]) -> String {
-        guard !original.isEmpty else { return "" }
-        guard original.count == translated.count else {
+        guard original.count == translated.count, !original.isEmpty else {
             return toSRT(original) + "\n\n" + toSRT(translated)
         }
 
-        let mergedOrig = mergeShortSegments(original)
-        let mergedTrans = mergeShortSegments(translated)
-        let splitOrig = smartSplit(mergedOrig)
-        let splitTrans = smartSplit(mergedTrans)
-
-        let count = min(splitOrig.count, splitTrans.count)
         var result = ""
-        for i in 0..<count {
+        for i in 0..<original.count {
             result += "\(i + 1)\n"
-            result += "\(formatTime(splitOrig[i].startMs)) --> \(formatTime(splitOrig[i].endMs))\n"
-            result += "\(splitOrig[i].text)\n\(splitTrans[i].text)\n\n"
+            result += "\(formatTime(original[i].startMs)) --> \(formatTime(original[i].endMs))\n"
+            result += original[i].text
+            let t = translated[i].text
+            if !t.isEmpty { result += "\n\(t)" }
+            result += "\n\n"
         }
         return result
     }

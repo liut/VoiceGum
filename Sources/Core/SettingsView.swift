@@ -480,6 +480,7 @@ struct LLMSettingsTab: View {
     @State private var isFetchingModels = false
     @State private var fetchStatus: String? = nil
     @State private var llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
+    @State private var llamaServerURL = ""
     private var modelFetchTask = ModelFetchTask()
 
     /// Mutable box so we can cancel in-flight fetch without @State concurrency warnings.
@@ -492,7 +493,7 @@ struct LLMSettingsTab: View {
     private var providers: [(String, String)] {
         var list: [(String, String)] = [("openai", "OpenAI 兼容"), ("anthropic", "Anthropic 兼容"), ("ollama", "Ollama")]
         if AppPreferences.shared.isLLaMACLIAvailable {
-            list.append(("llamacli", "llama-cli (Local)"))
+            list.append(("llamacli", "llama.cpp (Local)"))
         }
         return list
     }
@@ -522,6 +523,11 @@ struct LLMSettingsTab: View {
                         .onChange(of: llmModel) { AppPreferences.shared.setLLMModel(llmModel) }
                     Stepper(String(localized: "线程数: \(llamaCLIThreads)"), value: $llamaCLIThreads, in: 1...16)
                         .onChange(of: llamaCLIThreads) { AppPreferences.shared.llamaCLIThreads = llamaCLIThreads }
+                    HStack {
+                        Text("Base URL").foregroundColor(.secondary)
+                        Text(llamaServerURL.isEmpty ? "http://localhost:<auto>" : llamaServerURL)
+                            .foregroundColor(llamaServerURL.isEmpty ? .secondary : .primary)
+                    }.font(.caption)
                 } else {
                     HStack(spacing: 4) {
                         TextField("Model", text: $llmModel).textFieldStyle(.roundedBorder)
@@ -629,6 +635,7 @@ struct LLMSettingsTab: View {
             translateMode = AppPreferences.shared.translateMode
             translatePrompt = AppPreferences.shared.translatePrompt
             llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
+            llamaServerURL = ""
             loadProviderConfig()
             fetchModels()
         }
@@ -639,6 +646,7 @@ struct LLMSettingsTab: View {
         llmModel = AppPreferences.shared.llmModel()
         apiKey = AppPreferences.shared.llmAPIKey()
         llamaCLIThreads = AppPreferences.shared.llamaCLIThreads
+        llamaServerURL = ""
     }
 
     private func fetchModels() {
@@ -673,20 +681,27 @@ struct LLMSettingsTab: View {
         if llmProvider == "llamacli" {
             guard !llmModel.isEmpty else { testError = "请输入 HF Repo 或模型路径"; return }
             Task {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/llama-cli")
-                proc.arguments = ["--version"]
-                let pipe = Pipe()
-                proc.standardOutput = pipe
-                proc.standardError = FileHandle.nullDevice
                 do {
-                    try proc.run()
-                    proc.waitUntilExit()
-                    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                    testSuccess = true
-                    testError = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let serverURL = try await LlamaServerManager.shared.start(
+                        model: llmModel,
+                        threads: llamaCLIThreads
+                    )
+                    let healthURL = serverURL.deletingLastPathComponent().appendingPathComponent("health")
+                    var req = URLRequest(url: healthURL, timeoutInterval: 5)
+                    req.httpMethod = "GET"
+                    let (_, resp) = try await URLSession.shared.data(for: req)
+                    if let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 {
+                        testSuccess = true
+                        testError = String(localized: "连接成功 (llama.cpp)")
+                        llamaServerURL = serverURL.absoluteString
+                    } else {
+                        testError = "状态码: \((resp as? HTTPURLResponse)?.statusCode ?? -1)"
+                        llamaServerURL = ""
+                    }
+                    await LlamaServerManager.shared.scheduleIdleStop()
                 } catch {
-                    testError = "llama-cli 启动失败: \(error.localizedDescription)"
+                    testError = error.localizedDescription
+                    llamaServerURL = ""
                 }
             }
             return

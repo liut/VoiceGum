@@ -14,7 +14,7 @@ public enum LLMProvider: String, CaseIterable, Sendable {
         case .openai: return "OpenAI"
         case .azure: return "Azure OpenAI"
         case .anthropic: return "Anthropic"
-        case .llamaCLI: return "llama-cli (Local)"
+        case .llamaCLI: return "llama.cpp (Local)"
         }
     }
 
@@ -233,6 +233,7 @@ public actor LLMClient {
             let model: String
             let messages: [Message]
             let temperature: Double = 0.7
+            let max_tokens: Int = 2048
             struct Message: Encodable { let role: String; let content: String }
         }
 
@@ -378,47 +379,21 @@ public actor LLMClient {
         }
     }
 
+    // MARK: - llama.cpp server
+
     private func llamaCLIChat(systemPrompt: String, userPrompt: String) async throws -> String {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/llama-cli")
+        let serverURL = try await LlamaServerManager.shared.start(
+            model: model,
+            threads: AppPreferences.shared.llamaCLIThreads
+        )
+        await LlamaServerManager.shared.cancelIdleStop()
+        defer { Task { await LlamaServerManager.shared.scheduleIdleStop() } }
 
-        let isLocalPath = model.hasPrefix("/") || model.hasPrefix("~") || model.hasSuffix(".gguf")
-        if isLocalPath {
-            proc.arguments = ["-m", model]
-        } else {
-            proc.arguments = ["-hf", model]
-        }
-        let threads = AppPreferences.shared.llamaCLIThreads
-        proc.arguments! += [
-            "-sys", systemPrompt,
-            "-p", userPrompt,
-            "--single-turn",
-            "--no-display-prompt",
-            "-n", "4096",
-            "-t", "\(threads)"
-        ]
-
-        let outPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = FileHandle.nullDevice
-
-        await Logger.shared.info("llama-cli 开始: model=\(model)")
-
-        try proc.run()
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
-
-        guard proc.terminationStatus == 0 else {
-            throw LLMClientError.networkFailed("llama-cli exit code \(proc.terminationStatus)")
-        }
-
-        let output = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !output.isEmpty else {
-            throw LLMClientError.networkFailed("llama-cli 返回空结果")
-        }
-
-        await Logger.shared.info("llama-cli 完成: \(output.prefix(AppPreferences.logTruncationSuccess))")
-        return output
+        return try await openaiChat(
+            baseURL: serverURL,
+            model: model,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt
+        )
     }
 }

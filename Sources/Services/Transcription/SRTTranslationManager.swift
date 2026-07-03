@@ -64,9 +64,18 @@ public final class SRTTranslationManager {
 
         // 5. Translate
         let translatedSegments: [SubtitleSegment]
-        if translateMode == .batch {
+        let isTranslategemma = AppPreferences.shared.llmModel().lowercased().contains("translategemma")
+        let effectiveMode: TranslateMode = isTranslategemma ? .batch : translateMode
+        let chunkSize = isTranslategemma ? 10 : maxSegmentsPerChunk
+        // TranslageGemma needs explicit target language in system prompt; kwargs alone not reliable.
+        let tgPrompt = targetLangLabel(targetLang)
+        let effectivePrompt = isTranslategemma
+            ? "Translate each [SEGMENT N] block to \(tgPrompt). Keep markers exactly as-is. 1:1 output only."
+            : customPrompt
+        if effectiveMode == .batch {
             translatedSegments = try await translateBatch(
-                segments: segments, targetLang: targetLang, customPrompt: customPrompt, progress: progress)
+                segments: segments, targetLang: targetLang, customPrompt: effectivePrompt,
+                progress: progress, chunkSize: chunkSize)
         } else {
             translatedSegments = try await translatePerSegment(
                 segments: segments, targetLang: targetLang, customPrompt: customPrompt, progress: progress)
@@ -119,8 +128,9 @@ public final class SRTTranslationManager {
 
     private func translateBatch(segments: [SubtitleSegment], targetLang: String,
                                  customPrompt: String?,
-                                 progress: @Sendable (Int, Int) -> Void) async throws -> [SubtitleSegment] {
-        let chunks = chunkSegments(segments)
+                                 progress: @Sendable (Int, Int) -> Void,
+                                 chunkSize: Int = 80) async throws -> [SubtitleSegment] {
+        let chunks = chunkSegments(segments, maxPerChunk: chunkSize)
         var allTranslated: [SubtitleSegment] = []
         var completedCount = 0
 
@@ -128,15 +138,18 @@ public final class SRTTranslationManager {
             try Task.checkCancellation()
 
             var markedText = ""
-            let segs = chunk.map { $0.1 }
-            for (i, seg) in chunk {
-                markedText += "[SEGMENT \(i + 1)]\n\(seg.text)\n[/SEGMENT \(i + 1)]\n"
+            var globalIndices: [Int] = []
+            for (globalIdx, seg) in chunk {
+                let num = globalIdx + 1  // 1-based global segment number
+                globalIndices.append(num)
+                markedText += "[SEGMENT \(num)]\n\(seg.text)\n[/SEGMENT \(num)]\n"
             }
             let instruction = "Keep the [SEGMENT N] and [/SEGMENT N] markers exactly as-is. Translate only the text between each marker pair — do not merge or reorder segments. Each output segment must correspond 1:1 to the input segment.\n\n"
 
+            let segs = chunk.map { $0.1 }
             let raw = try await LLMClient.shared.translate(
                 text: instruction + markedText, targetLanguage: targetLang, customPrompt: customPrompt)
-            let parsed = parseTranslatedSegments(raw: raw, original: segs)
+            let parsed = parseTranslatedSegments(raw: raw, original: segs, startIndex: globalIndices.first ?? 1)
             allTranslated.append(contentsOf: parsed)
             completedCount += chunk.count
             progress(min(completedCount, segments.count), segments.count)
@@ -147,6 +160,17 @@ public final class SRTTranslationManager {
 
     // MARK: - Helpers
 
+    private nonisolated func targetLangLabel(_ code: String) -> String {
+        switch code.lowercased() {
+        case "zh-cn", "zh-hans", "zh", "chs": return "Simplified Chinese"
+        case "zh-tw", "zh-hant", "cht": return "Traditional Chinese"
+        case "ja", "jpn", "jp": return "Japanese"
+        case "ko", "kor", "kr": return "Korean"
+        case "en", "eng": return "English"
+        default: return code
+        }
+    }
+
     private func configureLLMClient() async throws {
         let providerStr = AppPreferences.shared.llmProvider
         let provider: LLMProvider = switch providerStr {
@@ -155,22 +179,22 @@ public final class SRTTranslationManager {
         case "llamacli": .llamaCLI
         default: .openai
         }
-        let baseURL = provider == .llamaCLI
-            ? URL(string: "http://localhost")!
-            : URL(string: AppPreferences.shared.llmBaseURL())
-        guard let baseURL else { throw SRTTranslationError.llmNotConfigured }
+        let prefsURL = AppPreferences.shared.llmBaseURL()
+        let baseURL = URL(string: prefsURL.isEmpty ? "http://localhost" : prefsURL) ?? URL(string: "http://localhost")!
+        if provider != .llamaCLI, prefsURL.isEmpty { throw SRTTranslationError.llmNotConfigured }
         let apiKey = AppPreferences.shared.llmAPIKey()
         await LLMClient.shared.configure(provider: provider, baseURL: baseURL,
                                           apiKey: apiKey.isEmpty ? nil : apiKey,
                                           model: AppPreferences.shared.llmModel())
     }
 
-    private nonisolated func chunkSegments(_ segments: [SubtitleSegment]) -> [[(Int, SubtitleSegment)]] {
+    private nonisolated func chunkSegments(_ segments: [SubtitleSegment],
+                                            maxPerChunk: Int = 80) -> [[(Int, SubtitleSegment)]] {
         var chunks: [[(Int, SubtitleSegment)]] = []
         var current: [(Int, SubtitleSegment)] = []
         for (i, seg) in segments.enumerated() {
             current.append((i, seg))
-            if current.count >= maxSegmentsPerChunk {
+            if current.count >= maxPerChunk {
                 chunks.append(current)
                 current = []
             }
@@ -179,14 +203,20 @@ public final class SRTTranslationManager {
         return chunks
     }
 
-    private nonisolated func parseTranslatedSegments(raw: String, original: [SubtitleSegment]) -> [SubtitleSegment] {
+    private nonisolated func parseTranslatedSegments(raw: String, original: [SubtitleSegment],
+                                                      startIndex: Int = 1) -> [SubtitleSegment] {
         var result: [SubtitleSegment] = []
         for (i, seg) in original.enumerated() {
-            let openMarker = "[SEGMENT \(i + 1)]"
-            let closeMarker = "[/SEGMENT \(i + 1)]"
-            guard let openRange = raw.range(of: openMarker),
-                  let closeRange = raw.range(of: closeMarker),
-                  openRange.upperBound < closeRange.lowerBound else { continue }
+            let globalIdx = startIndex + i
+            let openMarker = "[SEGMENT \(globalIdx)]"
+            let closeMarker = "[/SEGMENT \(globalIdx)]"
+            guard let openRange = raw.range(of: openMarker, options: .caseInsensitive),
+                  let closeRange = raw.range(of: closeMarker, options: .caseInsensitive),
+                  openRange.upperBound < closeRange.lowerBound else {
+                result.append(SubtitleSegment(text: "", startMs: seg.startMs,
+                                              endMs: seg.endMs, language: seg.language))
+                continue
+            }
             var startIdx = openRange.upperBound
             while startIdx < closeRange.lowerBound, raw[startIdx].isNewline || raw[startIdx].isWhitespace {
                 startIdx = raw.index(after: startIdx)
@@ -196,7 +226,11 @@ public final class SRTTranslationManager {
                 let prev = raw.index(before: endIdx)
                 if raw[prev].isNewline || raw[prev].isWhitespace { endIdx = prev } else { break }
             }
-            guard startIdx < endIdx else { continue }
+            guard startIdx < endIdx else {
+                result.append(SubtitleSegment(text: "", startMs: seg.startMs,
+                                              endMs: seg.endMs, language: seg.language))
+                continue
+            }
             let translatedText = String(raw[startIdx..<endIdx])
             result.append(SubtitleSegment(text: translatedText, startMs: seg.startMs,
                                           endMs: seg.endMs, language: seg.language))

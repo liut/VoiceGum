@@ -237,16 +237,27 @@ public final class AppPreferences: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Keys.llamaCLIThreads) }
     }
 
-    /// Whether `llama-cli` is available in PATH.
-    public var isLLaMACLIAvailable: Bool {
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/local/bin:/usr/bin"
-        let dirs = path.split(separator: ":")
-        for dir in dirs {
-            let p = URL(fileURLWithPath: String(dir)).appendingPathComponent("llama-cli")
-            if FileManager.default.isExecutableFile(atPath: p.path) { return true }
+    /// Search directories for `llama-server` (preferred) or `llama` (for `llama server` subcommand).
+    /// Returns the full path, or `nil` if neither is found.
+    /// Always checks `/usr/local/bin`, `/opt/homebrew/bin`, `/opt/local/bin` so that GUI-launched
+    /// apps (which inherit a truncated `PATH` from Finder) can still find the binary.
+    public func llamaCLIPath() -> String? {
+        var dirs = (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/local/bin:/usr/bin")
+            .split(separator: ":").map(String.init)
+        for extra in ["/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"] {
+            if !dirs.contains(extra) { dirs.append(extra) }
         }
-        return false
+        for name in ["llama-server", "llama"] {
+            for dir in dirs {
+                let p = URL(fileURLWithPath: dir).appendingPathComponent(name)
+                if FileManager.default.isExecutableFile(atPath: p.path) { return p.path }
+            }
+        }
+        return nil
     }
+
+    /// Whether `llama-server` or `llama` is available in PATH.
+    public var isLLaMACLIAvailable: Bool { llamaCLIPath() != nil }
 
     public static let defaultTranslatePrompt = "你是一个专业的字幕翻译助手。请将以下文本翻译为目标语言，保持口语化的表达风格，不要添加任何解释或额外内容，只输出翻译结果。"
 

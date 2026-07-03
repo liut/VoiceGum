@@ -764,10 +764,9 @@ final class TranscriptionViewModel: ObservableObject {
         case "llamacli": .llamaCLI
         default: .openai
         }
-        let baseURL = provider == .llamaCLI
-            ? URL(string: "http://localhost")!
-            : URL(string: AppPreferences.shared.llmBaseURL())
-        guard let baseURL else { return }
+        let prefsURL = AppPreferences.shared.llmBaseURL()
+        let baseURL = URL(string: prefsURL.isEmpty ? "http://localhost" : prefsURL) ?? URL(string: "http://localhost")!
+        if provider != .llamaCLI, prefsURL.isEmpty { return }
         let apiKey = AppPreferences.shared.llmAPIKey()
         await LLMClient.shared.configure(provider: provider, baseURL: baseURL, apiKey: apiKey.isEmpty ? nil : apiKey, model: AppPreferences.shared.llmModel())
     }
