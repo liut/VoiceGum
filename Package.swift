@@ -146,6 +146,11 @@ let package = Package(
             path: "Tests/CFunASREngineTests",
             cxxSettings: [.unsafeFlags(["-fno-modules"])]
         ),
+        .testTarget(
+            name: "VoiceGumServicesTests",
+            dependencies: ["VoiceGumServices"],
+            path: "Tests/VoiceGumServicesTests"
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
