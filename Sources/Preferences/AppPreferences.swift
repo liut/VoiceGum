@@ -37,6 +37,7 @@ public final class AppPreferences: @unchecked Sendable {
         static let llamaCLIThreads = "voicegum.llm.llamacli.threads"
         static let voiceInputTriggerKeyCode = "voicegum.voiceInput.triggerKeyCode"
         static let voiceInputEnabled = "voicegum.voiceInput.enabled"
+        static let voiceInputEngine = "voicegum.voiceInput.engine"
     }
 
     private init() {
@@ -122,6 +123,11 @@ public final class AppPreferences: @unchecked Sendable {
             return v > 0 ? v : 54 // Right Cmd
         }
         set { defaults.set(newValue, forKey: Keys.voiceInputTriggerKeyCode) }
+    }
+
+    public var voiceInputEngine: String {
+        get { defaults.string(forKey: Keys.voiceInputEngine) ?? "systemSpeech" }
+        set { defaults.set(newValue, forKey: Keys.voiceInputEngine) }
     }
 
     // MARK: - LLM (global)

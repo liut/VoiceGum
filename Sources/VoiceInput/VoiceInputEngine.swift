@@ -55,7 +55,8 @@ actor VoiceInputEngine {
 
     private var state = VoiceInputState.idle
     private var targetApp: NSRunningApplication?
-    private var isFunASRFallback = false
+    private var isUsingLocalModel = false
+    private var sessionPreference: VoiceInputEnginePreference = .systemSpeech
     private var accumulatedBuffers: [AVAudioPCMBuffer] = []
     private var bestLocalModel: (any TranscriptionService)?
     private var audioCapture: AudioCaptureEngine?
@@ -75,14 +76,27 @@ actor VoiceInputEngine {
         }
         targetApp = NSWorkspace.shared.frontmostApplication
 
-        if StreamingRecognizer.authorizationStatus == .notDetermined {
+        let preference = VoiceInputEnginePreference(storedValue: AppPreferences.shared.voiceInputEngine)
+        sessionPreference = preference
+        isUsingLocalModel = false
+        if preference == .systemSpeech, StreamingRecognizer.authorizationStatus == .notDetermined {
             _ = await StreamingRecognizer.requestAuthorization()
         }
 
         let language = AppPreferences.shared.language
-        let isAuth = StreamingRecognizer.authorizationStatus == .authorized
         let locale = StreamingRecognizer.resolveLocale(for: language)
-        isFunASRFallback = !(isAuth && locale != nil)
+        let decision = decideVoiceInputEngine(
+            preference: preference,
+            systemSpeechAvailable: StreamingRecognizer.authorizationStatus == .authorized && locale != nil,
+            downloadedLocalFamilies: downloadedLocalModelFamilies()
+        )
+        if case .modelNotDownloaded = decision {
+            await failModelNotDownloaded()
+            return
+        }
+        // Set the routing flag before the first suspension point so a release arriving while the
+        // recording state is being published still stops the session on the path it started on.
+        if case .local = decision { isUsingLocalModel = true }
 
         let capture = AudioCaptureEngine()
         do { try capture.start() }
@@ -93,8 +107,15 @@ actor VoiceInputEngine {
         startRMSPolling()
         startTimeout()
 
-        if isFunASRFallback { await startFunASR(capture) }
-        else { await startSFSpeech(capture, locale: locale!) }
+        switch decision {
+        case .systemSpeech:
+            if let locale { await startSFSpeech(capture, locale: locale) }
+            else { await switchToLocalModel(capture) }
+        case .local(let family):
+            await startLocalModel(capture, family: family, isFallback: false)
+        case .modelNotDownloaded:
+            break
+        }
     }
 
     func stopRecording() async {
@@ -102,7 +123,7 @@ actor VoiceInputEngine {
         case .idle, .done, .cancelled: return
         case .error:
             cleanup(); state = .cancelled; await emit(.cancelled)
-        case .recording where isFunASRFallback:
+        case .recording where isUsingLocalModel:
             state = .recognizing; await emit(.recognizing)
             startStallWatchdog()
             await processFunASR()
@@ -116,6 +137,7 @@ actor VoiceInputEngine {
     func cancelRecording() async {
         audioCapture?.stop(); recognizer?.cancel(); recognizer = nil
         accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog(); audioCapture = nil
+        isUsingLocalModel = false; bestLocalModel = nil
         state = .cancelled; await emit(.cancelled)
     }
 
@@ -123,7 +145,7 @@ actor VoiceInputEngine {
 
     private func startSFSpeech(_ capture: AudioCaptureEngine, locale: Locale) async {
         guard let rec = StreamingRecognizer(locale: locale) else {
-            await switchToFunASR(capture); return
+            await switchToLocalModel(capture); return
         }
         recognizer = rec
         rec.onPartialResult = { [weak self] t in
@@ -136,28 +158,42 @@ actor VoiceInputEngine {
             Task { await self?.handleRecognitionError() }
         }
         do { try rec.start() }
-        catch { await switchToFunASR(capture); return }
+        catch { await switchToLocalModel(capture); return }
         capture.onAudioBuffer = { [weak rec] b in rec?.append(b) }
         await emitEngine(.systemSpeech)
+        await logEngine("decision=systemSpeech engine=SFSpeech")
     }
 
-    private func switchToFunASR(_ capture: AudioCaptureEngine) async {
-        isFunASRFallback = true
-        await startFunASR(capture)
+    private func switchToLocalModel(_ capture: AudioCaptureEngine) async {
+        let downloaded = downloadedLocalModelFamilies()
+        guard let family = VoiceInputLocalModelFamily.fallbackOrder.first(where: downloaded.contains) else {
+            await failModelNotDownloaded()
+            return
+        }
+        isUsingLocalModel = true
+        await startLocalModel(capture, family: family, isFallback: true)
     }
 
-    // MARK: - FunASR path
+    // MARK: - Local model path
 
-    private func startFunASR(_ capture: AudioCaptureEngine) async {
-        guard let (service, _) = findBestLocalModel() else {
-            capture.stop(); audioCapture = nil; stopRMSPolling()
-            state = .error(.modelNotDownloaded); await emit(state)
+    private func startLocalModel(_ capture: AudioCaptureEngine, family: VoiceInputLocalModelFamily, isFallback: Bool) async {
+        guard let (service, modelId) = resolveLocalModel(for: family) else {
+            await failModelNotDownloaded()
             return
         }
         bestLocalModel = service
         accumulatedBuffers = []
         capture.onAudioBuffer = { [weak self] b in Task { await self?.accumulate(b) } }
         await emitEngine(.offlineModel)
+        let origin = isFallback ? "fallback=systemSpeechFailed" : "decision=local"
+        await logEngine("\(origin) engine=\(family.rawValue) model=\(modelId)")
+    }
+
+    private func failModelNotDownloaded() async {
+        cleanup()
+        state = .error(.modelNotDownloaded)
+        await logEngine("decision=modelNotDownloaded")
+        await emit(state)
     }
 
     private func accumulate(_ b: AVAudioPCMBuffer) { accumulatedBuffers.append(b) }
@@ -172,7 +208,7 @@ actor VoiceInputEngine {
         }
         do {
             let result = try await svc.transcribe(file: url, language: AppPreferences.shared.language)
-        await handleFinalText(result.text)
+            await handleFinalText(result.text)
         } catch {
             cleanup(); state = .error(.engineFailure(error.localizedDescription)); await emit(state)
         }
@@ -197,6 +233,7 @@ actor VoiceInputEngine {
     private func cleanup() {
         audioCapture?.stop(); audioCapture = nil; recognizer = nil
         accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog()
+        isUsingLocalModel = false; bestLocalModel = nil
     }
 
     // MARK: - WAV
@@ -241,27 +278,41 @@ actor VoiceInputEngine {
 
     // MARK: - Model discovery
 
-    private func findBestLocalModel() -> (service: any TranscriptionService, language: String)? {
-        let modelsDir = FileManager.default.homeDirectoryForCurrentUser
+    private var modelsDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/VoiceGum/Models")
+    }
 
-        let nanoDir = modelsDir.appendingPathComponent("funasr-nano")
-        let nanoFiles = (try? FileManager.default.contentsOfDirectory(atPath: nanoDir.path)) ?? []
-        if nanoFiles.contains(where: { $0.hasSuffix(".gguf") }) {
-            return (FunASRNanoTranscriptionService(modelId: "funasr-nano"), AppPreferences.shared.language)
+    private func hasGGUF(in directory: URL) -> Bool {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return files.contains(where: { $0.hasSuffix(".gguf") })
+    }
+
+    private func downloadedLocalModelFamilies() -> Set<VoiceInputLocalModelFamily> {
+        let modelsDir = modelsDirectory
+        var families: Set<VoiceInputLocalModelFamily> = []
+        if hasGGUF(in: modelsDir.appendingPathComponent("funasr-nano")) { families.insert(.funASR) }
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path)) ?? []
+        if entries.contains(where: { $0.hasPrefix("sense-voice") && hasGGUF(in: modelsDir.appendingPathComponent($0)) }) {
+            families.insert(.senseVoice)
         }
+        return families
+    }
 
-        let svDirs = (try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path)) ?? []
-        for dirName in svDirs {
-            if dirName.hasPrefix("sense-voice") {
-                let files = (try? FileManager.default.contentsOfDirectory(atPath: modelsDir.appendingPathComponent(dirName).path)) ?? []
-                if files.contains(where: { $0.hasSuffix(".gguf") }) {
-                    return (FunASRTranscriptionService(modelId: dirName), AppPreferences.shared.language)
-                }
+    private func resolveLocalModel(for family: VoiceInputLocalModelFamily) -> (service: any TranscriptionService, modelId: String)? {
+        let modelsDir = modelsDirectory
+        switch family {
+        case .funASR:
+            guard hasGGUF(in: modelsDir.appendingPathComponent("funasr-nano")) else { return nil }
+            return (FunASRNanoTranscriptionService(modelId: "funasr-nano"), "funasr-nano")
+        case .senseVoice:
+            let entries = (try? FileManager.default.contentsOfDirectory(atPath: modelsDir.path)) ?? []
+            for dirName in entries where dirName.hasPrefix("sense-voice") {
+                guard hasGGUF(in: modelsDir.appendingPathComponent(dirName)) else { continue }
+                return (FunASRTranscriptionService(modelId: dirName), dirName)
             }
+            return nil
         }
-
-        return nil
     }
 
     // MARK: - RMS Polling
@@ -325,5 +376,9 @@ actor VoiceInputEngine {
 
     private func emitEngine(_ engine: VoiceInputASREngine) async {
         await MainActor.run { self._onEngineChange?(engine) }
+    }
+
+    private func logEngine(_ detail: String) async {
+        await Logger.shared.info("语音输入引擎 preference=\(sessionPreference.rawValue) \(detail)")
     }
 }

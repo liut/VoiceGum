@@ -2,6 +2,7 @@ import SwiftUI
 import VoiceGumPreferences
 import VoiceGumKeychain
 import VoiceGumServices
+import VoiceGumVoiceInput
 
 public struct SettingsView: View {
     @State private var selectedTab: Int
@@ -288,6 +289,7 @@ struct GeneralSettingsTab: View {
 struct VoiceInputSettingsSection: View {
     @State private var voiceInputEnabled = AppPreferences.shared.voiceInputEnabled
     @State private var triggerKeyCode = AppPreferences.shared.voiceInputTriggerKeyCode
+    @State private var enginePreference = VoiceInputEnginePreference(storedValue: AppPreferences.shared.voiceInputEngine)
 
     let keyOptions: [(Int, String)] = [
         (63, "Fn / Globe"),
@@ -316,6 +318,15 @@ struct VoiceInputSettingsSection: View {
                 }
                 .onChange(of: triggerKeyCode) {
                     AppPreferences.shared.voiceInputTriggerKeyCode = triggerKeyCode
+                }
+
+                Picker(String(localized: "优先引擎"), selection: $enginePreference) {
+                    ForEach(VoiceInputEnginePreference.allCases, id: \.self) { preference in
+                        Text(preference.displayName).tag(preference)
+                    }
+                }
+                .onChange(of: enginePreference) {
+                    AppPreferences.shared.voiceInputEngine = enginePreference.rawValue
                 }
             }
         }
