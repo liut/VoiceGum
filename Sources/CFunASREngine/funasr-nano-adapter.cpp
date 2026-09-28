@@ -195,4 +195,23 @@ char * nano_transcribe(void * handle, const char * wav_path, int n_threads) {
     return strdup(full_text.c_str());
 }
 
+char * nano_transcribe_pcm(void * handle, const float * samples, int n_samples, int n_threads) {
+    auto * h = static_cast<NanoHandle *>(handle);
+    if (!h || !h->enc_loaded || !h->llm_loaded || !samples || n_samples <= 0) return strdup("");
+    (void)n_threads;
+
+    std::vector<float> wav(samples, samples + n_samples);
+
+    int T = 0;
+    auto fb = fbank_nano(wav, T);
+    if (T < 1) return strdup("");
+
+    int D_out = 0, n_aud = 0;
+    auto audio_embd = nano_encoder_run(h->enc, fb, T, 560, D_out, n_aud);
+    if (n_aud < 1) return strdup("");
+
+    auto text = nano_llm_transcribe(h->llm, audio_embd, n_aud, D_out);
+    return strdup(text.c_str());
+}
+
 } // extern "C"

@@ -18,6 +18,8 @@ final class VoiceInputOverlayWindow: NSPanel {
     private let cornerRadius: CGFloat = 28
     private let minWidth: CGFloat = 240
     private let maxWidth: CGFloat = 620
+    /// Single-line capsule: long transcripts show only their most recent characters.
+    private let visibleCharacterLimit = 40
 
     init() {
         let content = OverlayContent(model: overlayModel)
@@ -73,7 +75,9 @@ final class VoiceInputOverlayWindow: NSPanel {
     // MARK: - Public API
 
     func updateText(_ text: String) {
-        overlayModel.displayText = text
+        overlayModel.displayText = text.count > visibleCharacterLimit
+            ? "…" + String(text.suffix(visibleCharacterLimit))
+            : text
         sizeToFitContent(animated: true)
     }
 

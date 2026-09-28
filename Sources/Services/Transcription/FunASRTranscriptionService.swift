@@ -101,15 +101,7 @@ public final class FunASRTranscriptionService: @unchecked Sendable, Transcriptio
                     continuation.resume(throwing: TranscriptionError.transcriptionFailed("模型未加载"))
                     return
                 }
-                let langCode: String = {
-                    switch language {
-                    case "zh-CN", "zh-TW": return "zh"
-                    case "en": return "en"
-                    case "ja": return "ja"
-                    case "ko": return "ko"
-                    default: return "auto"
-                    }
-                }()
+                let langCode = Self.languageCode(for: language)
 
                 let segResult = sv_transcribe_segments(h, wavFile.path, langCode, Int32(ProcessInfo.processInfo.activeProcessorCount), makeProgress, servicePtr)
 
@@ -142,6 +134,52 @@ public final class FunASRTranscriptionService: @unchecked Sendable, Transcriptio
 
         await Logger.shared.info("FunASR 完成: \(transcriptionResult.text)")
         return transcriptionResult
+    }
+
+    /// Transcribes one utterance of 16 kHz mono float PCM (live preview path).
+    /// No internal VAD and no batching — the caller owns the segment boundaries.
+    public func transcribePCM(_ samples: [Float], language: String) async throws -> String {
+        guard !samples.isEmpty else { return "" }
+        if svHandle == nil {
+            try loadModel()
+        }
+
+        setTranscribing(true)
+        defer { setTranscribing(false) }
+
+        let langCode = Self.languageCode(for: language)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global().async {
+                guard let h = self.svHandle else {
+                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("模型未加载"))
+                    return
+                }
+                let result = sv_transcribe_pcm(
+                    h,
+                    samples,
+                    Int32(samples.count),
+                    langCode,
+                    Int32(ProcessInfo.processInfo.activeProcessorCount))
+                guard let r = result else {
+                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("FunASR 转写返回空"))
+                    return
+                }
+                let text = String(cString: r)
+                free(r)
+                continuation.resume(returning: text)
+            }
+        }
+    }
+
+    static func languageCode(for language: String) -> String {
+        switch language {
+        case "zh-CN", "zh-TW": return "zh"
+        case "en": return "en"
+        case "ja": return "ja"
+        case "ko": return "ko"
+        default: return "auto"
+        }
     }
 
     public func unload() {

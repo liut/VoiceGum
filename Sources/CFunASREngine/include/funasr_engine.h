@@ -28,6 +28,16 @@ char * sv_transcribe(
     funasr_progress_fn on_progress,
     void * progress_userdata);
 
+// Transcribe a single utterance from 16 kHz mono float PCM in [-1, 1] (blocking).
+// No internal VAD and no batching — the caller decides the segment boundaries.
+// Returns malloced string ("" on empty input or failure). The handle is not reentrant.
+char * sv_transcribe_pcm(
+    void * handle,
+    const float * samples,
+    int n_samples,
+    const char * language,
+    int n_threads);
+
 // ── Per-segment transcription ──
 
 typedef struct {
@@ -64,6 +74,11 @@ void nano_free(void * handle);
 
 // Transcribe WAV file (blocking). Returns malloced string.
 char * nano_transcribe(void * handle, const char * wav_path, int n_threads);
+
+// Transcribe a single utterance from 16 kHz mono float PCM in [-1, 1] (blocking).
+// Runs encoder + LLM on the given samples only; no internal VAD and no 30s splitting.
+// Returns malloced string ("" on empty input or failure). The handle is not reentrant.
+char * nano_transcribe_pcm(void * handle, const float * samples, int n_samples, int n_threads);
 
 // Transcribe WAV file with per-segment timing via internal VAD (blocking).
 // Returns sv_result — caller must free with sv_free_result().

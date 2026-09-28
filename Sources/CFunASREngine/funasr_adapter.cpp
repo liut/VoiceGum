@@ -34,6 +34,17 @@ static void bridge_progress_callback(
     }
 }
 
+// CTC output text from the decoder state. ids[0..3] are the language/emotion markers.
+static std::string sv_state_text(sense_voice_context * ctx) {
+    std::string text;
+    auto &ids = ctx->state->ids;
+    for (size_t i = 4; i < ids.size(); i++) {
+        if (i > 4 && ids[i-1] == ids[i]) continue;
+        if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
+    }
+    return text;
+}
+
 extern "C" {
 
 void * sv_load_model(const char * gguf_path, int use_gpu) {
@@ -140,11 +151,7 @@ char * sv_transcribe(
             return false;
         }
 
-        auto &ids = ctx->state->ids;
-        for (size_t i = 4; i < ids.size(); i++) {
-            if (i > 4 && ids[i-1] == ids[i]) continue;
-            if (ids[i]) text += ctx->vocab.id_to_token[ids[i]];
-        }
+        text += sv_state_text(ctx);
         return true;
     };
 
@@ -191,6 +198,45 @@ char * sv_transcribe(
 
     if (on_progress) on_progress(1.0f, progress_userdata);
 
+    while (!text.empty() && isspace((unsigned char)text.back())) text.pop_back();
+    return strdup(text.c_str());
+}
+
+char * sv_transcribe_pcm(
+    void * handle,
+    const float * samples,
+    int n_samples,
+    const char * language,
+    int n_threads)
+{
+    auto * w = (sense_voice_wrapper *)handle;
+    if (!w || !w->loaded || !samples || n_samples <= 0) return strdup("");
+
+    auto & ctx = w->ctx;
+    ctx->language_id = sense_voice_lang_id(language);
+
+    // Live input arrives as float PCM in [-1, 1]; the feature path expects int16-range samples.
+    std::vector<double> pcmf64(n_samples);
+    for (int i = 0; i < n_samples; i++) {
+        pcmf64[i] = (double)samples[i] * 32768.0;
+    }
+
+    sense_voice_full_params wparams = sense_voice_full_default_params(SENSE_VOICE_SAMPLING_GREEDY);
+    wparams.n_threads = n_threads;
+    wparams.print_progress = false;
+    wparams.print_timestamps = false;
+    wparams.language = language;
+
+    ctx->state->result_all.clear();
+    ctx->state->segmentIDs.clear();
+    ctx->state->duration = (float)n_samples / SENSE_VOICE_SAMPLE_RATE;
+
+    if (sense_voice_full_parallel(ctx, wparams, pcmf64, n_samples, 1) != 0) {
+        SENSE_VOICE_LOG_ERROR("%s: transcription failed\n", __func__);
+        return strdup("");
+    }
+
+    std::string text = sv_state_text(ctx);
     while (!text.empty() && isspace((unsigned char)text.back())) text.pop_back();
     return strdup(text.c_str());
 }

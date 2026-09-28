@@ -58,6 +58,10 @@ actor VoiceInputEngine {
     private var isUsingLocalModel = false
     private var sessionPreference: VoiceInputEnginePreference = .systemSpeech
     private var accumulatedBuffers: [AVAudioPCMBuffer] = []
+    private var liveSession: LiveTranscriptionSession?
+    private var sessionLanguage = "auto"
+    private var previewText = ""
+    private var previewSegmentCount = 0
     private var bestLocalModel: (any TranscriptionService)?
     private var audioCapture: AudioCaptureEngine?
     private var recognizer: StreamingRecognizer?
@@ -84,6 +88,8 @@ actor VoiceInputEngine {
         }
 
         let language = AppPreferences.shared.language
+        // Fixed for the whole session so live preview and the final decode cannot disagree on it.
+        sessionLanguage = language
         let locale = StreamingRecognizer.resolveLocale(for: language)
         let decision = decideVoiceInputEngine(
             preference: preference,
@@ -126,6 +132,7 @@ actor VoiceInputEngine {
         case .recording where isUsingLocalModel:
             state = .recognizing; await emit(.recognizing)
             startStallWatchdog()
+            await finishLivePreview()
             await processFunASR()
         case .recording:
             recognizer?.finish()
@@ -136,6 +143,7 @@ actor VoiceInputEngine {
 
     func cancelRecording() async {
         audioCapture?.stop(); recognizer?.cancel(); recognizer = nil
+        await liveSession?.cancel(); liveSession = nil
         accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog(); audioCapture = nil
         isUsingLocalModel = false; bestLocalModel = nil
         state = .cancelled; await emit(.cancelled)
@@ -183,8 +191,12 @@ actor VoiceInputEngine {
         }
         bestLocalModel = service
         accumulatedBuffers = []
-        capture.onAudioBuffer = { [weak self] b in Task { await self?.accumulate(b) } }
+        previewText = ""
+        previewSegmentCount = 0
+        liveSession = makeLiveSession(for: service)
+        capture.onAudioBuffer = { [weak self] b in Task { await self?.handleLocalBuffer(b) } }
         await emitEngine(.offlineModel)
+        await emitPartial("录音中…")
         let origin = isFallback ? "fallback=systemSpeechFailed" : "decision=local"
         await logEngine("\(origin) engine=\(family.rawValue) model=\(modelId)")
     }
@@ -196,7 +208,43 @@ actor VoiceInputEngine {
         await emit(state)
     }
 
-    private func accumulate(_ b: AVAudioPCMBuffer) { accumulatedBuffers.append(b) }
+    /// Builds the live preview session when the service can decode a single utterance from PCM.
+    private func makeLiveSession(for service: any TranscriptionService) -> LiveTranscriptionSession? {
+        let decoder: LiveTranscriptionSession.Decoder
+        switch service {
+        case let svc as FunASRTranscriptionService:
+            decoder = { samples, language in try await svc.transcribePCM(samples, language: language) }
+        case let svc as FunASRNanoTranscriptionService:
+            decoder = { samples, language in try await svc.transcribePCM(samples, language: language) }
+        default:
+            return nil
+        }
+        return LiveTranscriptionSession(
+            language: sessionLanguage,
+            decoder: decoder,
+            onText: { [weak self] text in
+                Task { await self?.handlePreviewText(text) }
+            })
+    }
+
+    private func handleLocalBuffer(_ b: AVAudioPCMBuffer) async {
+        accumulatedBuffers.append(b)
+        await liveSession?.append(b)
+    }
+
+    private func handlePreviewText(_ text: String) async {
+        previewText = text
+        previewSegmentCount += 1
+        await emitPartial(text)
+    }
+
+    /// Drains the preview pipeline so the final decode never runs alongside a preview decode
+    /// on the same model handle.
+    private func finishLivePreview() async {
+        guard let session = liveSession else { return }
+        liveSession = nil
+        previewText = await session.finish()
+    }
 
     private func processFunASR() async {
         guard let url = writeWAV() else {
@@ -207,17 +255,30 @@ actor VoiceInputEngine {
             cleanup(); state = .error(.modelNotDownloaded); await emit(state); return
         }
         do {
-            let result = try await svc.transcribe(file: url, language: AppPreferences.shared.language)
+            let result = try await svc.transcribe(file: url, language: sessionLanguage)
+            await logPreviewAgreement(final: result.text)
             await handleFinalText(result.text)
         } catch {
             cleanup(); state = .error(.engineFailure(error.localizedDescription)); await emit(state)
         }
     }
 
+    /// Records how far the live preview drifted from the final whole-file decode.
+    private func logPreviewAgreement(final: String) async {
+        let preview = previewText
+        guard !preview.isEmpty else { return }
+        let sharedPrefix = zip(preview, final).prefix { $0 == $1 }.count
+        let delta = max(preview.count, final.count) - sharedPrefix
+        await Logger.shared.info(
+            "语音输入预览: 段落=\(previewSegmentCount) 预览=\(preview.count)字 最终=\(final.count)字 差异=\(delta)字 一致=\(preview == final)")
+    }
+
     // MARK: - Finalization
 
     private func handleFinalText(_ text: String) async {
         guard !text.isEmpty else { cleanup(); state = .done; await emit(.done); return }
+        // The final decode can differ from the preview; show it in the capsule before it goes away.
+        await emitPartial(text)
         // Pass text + target to ViewModel for MainActor injection (avoids MainActor.run deadlock)
         await emit(.injecting)
         await MainActor.run { [text, app = targetApp] in
@@ -233,6 +294,11 @@ actor VoiceInputEngine {
     private func cleanup() {
         audioCapture?.stop(); audioCapture = nil; recognizer = nil
         accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog()
+        if let session = liveSession {
+            liveSession = nil
+            Task { await session.cancel() }
+        }
+        previewText = ""; previewSegmentCount = 0
         isUsingLocalModel = false; bestLocalModel = nil
     }
 
@@ -372,6 +438,10 @@ actor VoiceInputEngine {
 
     private func emit(_ s: VoiceInputState) async {
         await MainActor.run { self._onStateChange?(s) }
+    }
+
+    private func emitPartial(_ text: String) async {
+        await MainActor.run { self._onPartialText?(text) }
     }
 
     private func emitEngine(_ engine: VoiceInputASREngine) async {

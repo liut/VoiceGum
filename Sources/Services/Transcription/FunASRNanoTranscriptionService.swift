@@ -132,6 +132,39 @@ public final class FunASRNanoTranscriptionService: @unchecked Sendable, Transcri
         return transcriptionResult
     }
 
+    /// Transcribes one utterance of 16 kHz mono float PCM (live preview path).
+    /// No internal VAD and no 30s splitting — the caller owns the segment boundaries.
+    public func transcribePCM(_ samples: [Float], language: String) async throws -> String {
+        guard !samples.isEmpty else { return "" }
+        if nanoHandle == nil {
+            try loadModel()
+        }
+
+        setTranscribing(true)
+        defer { setTranscribing(false) }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global().async {
+                guard let h = self.nanoHandle else {
+                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("模型未加载"))
+                    return
+                }
+                let result = nano_transcribe_pcm(
+                    h,
+                    samples,
+                    Int32(samples.count),
+                    Int32(ProcessInfo.processInfo.activeProcessorCount))
+                guard let r = result else {
+                    continuation.resume(throwing: TranscriptionError.transcriptionFailed("FunASR-Nano 转写返回空"))
+                    return
+                }
+                let text = String(cString: r)
+                free(r)
+                continuation.resume(returning: text)
+            }
+        }
+    }
+
     public func unload() {
         cancelUnloadTimer()
         stateLock.lock()
