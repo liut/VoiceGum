@@ -5,7 +5,7 @@ import SwiftUI
 final class OverlayViewModel: ObservableObject {
     @Published var rmsLevel: Float = 0
     @Published var displayText: String = ""
-    @Published var isStatusText: Bool = false
+    @Published var engine: VoiceInputASREngine = .systemSpeech
 }
 
 /// Floating capsule overlay window for voice input status display.
@@ -72,14 +72,17 @@ final class VoiceInputOverlayWindow: NSPanel {
 
     // MARK: - Public API
 
-    func updateText(_ text: String, isStatus: Bool = false) {
+    func updateText(_ text: String) {
         overlayModel.displayText = text
-        overlayModel.isStatusText = isStatus
         sizeToFitContent(animated: true)
     }
 
     func updateRMS(_ level: Float) {
         overlayModel.rmsLevel = level
+    }
+
+    func updateEngine(_ engine: VoiceInputASREngine) {
+        overlayModel.engine = engine
     }
 
     func show() {
@@ -102,9 +105,17 @@ final class VoiceInputOverlayWindow: NSPanel {
         }
     }
 
-    func hide(completion: (() -> Void)? = nil) {
+    /// Dismisses the overlay. `fadeDuration` 0 removes it right away — the voice input flow wants
+    /// the capsule gone the moment the text reaches the target field. A non-zero duration fades
+    /// it out instead, which is the hook for a future fade-out transition.
+    func hide(fadeDuration: TimeInterval = 0, completion: (() -> Void)? = nil) {
+        guard fadeDuration > 0 else {
+            orderOut(nil)
+            completion?()
+            return
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
+            ctx.duration = fadeDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             ctx.allowsImplicitAnimation = true
             self.animator().alphaValue = 0

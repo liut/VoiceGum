@@ -16,6 +16,13 @@ enum VoiceInputError {
     case engineFailure(String)
 }
 
+/// Which recognizer is running the current session. The overlay colors its waveform by engine so
+/// the system recognizer and the offline model are visually distinguishable.
+public enum VoiceInputASREngine: Equatable, Sendable {
+    case systemSpeech
+    case offlineModel
+}
+
 extension VoiceInputError: LocalizedError {
     var errorDescription: String? {
         switch self {
@@ -37,12 +44,12 @@ actor VoiceInputEngine {
     nonisolated(unsafe) private var _onStateChange: (@MainActor (VoiceInputState) -> Void)?
     nonisolated(unsafe) private var _onPartialText: (@MainActor (String) -> Void)?
     nonisolated(unsafe) private var _onRMSLevel: (@MainActor (Float) -> Void)?
-    nonisolated(unsafe) private var _onStatusText: (@MainActor (String) -> Void)?
+    nonisolated(unsafe) private var _onEngineChange: (@MainActor (VoiceInputASREngine) -> Void)?
 
     func setStateChangeHandler(_ h: @Sendable @escaping @MainActor (VoiceInputState) -> Void) { _onStateChange = h }
     func setPartialTextHandler(_ h: @Sendable @escaping @MainActor (String) -> Void) { _onPartialText = h }
     func setRMSLevelHandler(_ h: @Sendable @escaping @MainActor (Float) -> Void) { _onRMSLevel = h }
-    func setStatusTextHandler(_ h: @Sendable @escaping @MainActor (String) -> Void) { _onStatusText = h }
+    func setEngineChangeHandler(_ h: @Sendable @escaping @MainActor (VoiceInputASREngine) -> Void) { _onEngineChange = h }
 
     // MARK: State
 
@@ -55,7 +62,9 @@ actor VoiceInputEngine {
     private var recognizer: StreamingRecognizer?
     private var rmsTask: Task<Void, Never>?
     private var timeoutTask: Task<Void, Never>?
+    private var stallWatchdogTask: Task<Void, Never>?
     private let maxRecordingDuration: TimeInterval = 60
+    private let recognitionStallTimeout: TimeInterval = 15
 
     // MARK: - Public API
 
@@ -94,16 +103,19 @@ actor VoiceInputEngine {
         case .error:
             cleanup(); state = .cancelled; await emit(.cancelled)
         case .recording where isFunASRFallback:
-            state = .recognizing; await emit(.recognizing); await processFunASR()
+            state = .recognizing; await emit(.recognizing)
+            startStallWatchdog()
+            await processFunASR()
         case .recording:
             recognizer?.finish()
+            startStallWatchdog()
         default: break
         }
     }
 
     func cancelRecording() async {
         audioCapture?.stop(); recognizer?.cancel(); recognizer = nil
-        accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); audioCapture = nil
+        accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog(); audioCapture = nil
         state = .cancelled; await emit(.cancelled)
     }
 
@@ -126,7 +138,7 @@ actor VoiceInputEngine {
         do { try rec.start() }
         catch { await switchToFunASR(capture); return }
         capture.onAudioBuffer = { [weak rec] b in rec?.append(b) }
-        await setStatus("录音中")
+        await emitEngine(.systemSpeech)
     }
 
     private func switchToFunASR(_ capture: AudioCaptureEngine) async {
@@ -145,7 +157,7 @@ actor VoiceInputEngine {
         bestLocalModel = service
         accumulatedBuffers = []
         capture.onAudioBuffer = { [weak self] b in Task { await self?.accumulate(b) } }
-        await setStatus("录音中")
+        await emitEngine(.offlineModel)
     }
 
     private func accumulate(_ b: AVAudioPCMBuffer) { accumulatedBuffers.append(b) }
@@ -155,7 +167,6 @@ actor VoiceInputEngine {
             cleanup(); state = .error(.engineFailure("保存录音失败")); await emit(state); return
         }
         defer { try? FileManager.default.removeItem(at: url) }
-        await setStatus("识别中")
         guard let svc = bestLocalModel else {
             cleanup(); state = .error(.modelNotDownloaded); await emit(state); return
         }
@@ -185,7 +196,7 @@ actor VoiceInputEngine {
 
     private func cleanup() {
         audioCapture?.stop(); audioCapture = nil; recognizer = nil
-        accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout()
+        accumulatedBuffers.removeAll(); stopRMSPolling(); stopTimeout(); stopStallWatchdog()
     }
 
     // MARK: - WAV
@@ -283,11 +294,36 @@ actor VoiceInputEngine {
 
     private func stopTimeout() { timeoutTask?.cancel(); timeoutTask = nil }
 
+    /// Recognition normally finishes within a second or two. This watchdog only fires when it
+    /// stalls, so the capsule cannot stay on screen while nothing is recording or recognizing.
+    private func startStallWatchdog() {
+        stallWatchdogTask?.cancel()
+        stallWatchdogTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(self.recognitionStallTimeout))
+            guard !Task.isCancelled else { return }
+            await self.finishStalledRecognition()
+        }
+    }
+
+    private func stopStallWatchdog() { stallWatchdogTask?.cancel(); stallWatchdogTask = nil }
+
+    private func finishStalledRecognition() async {
+        switch state {
+        case .recording, .recognizing: break
+        default: return
+        }
+        cleanup()
+        state = .cancelled
+        await Logger.shared.warn("语音输入识别超时，强制收尾")
+        await emit(.cancelled)
+    }
+
     private func emit(_ s: VoiceInputState) async {
         await MainActor.run { self._onStateChange?(s) }
     }
 
-    private func setStatus(_ m: String) async {
-        await MainActor.run { self._onStatusText?(m) }
+    private func emitEngine(_ engine: VoiceInputASREngine) async {
+        await MainActor.run { self._onEngineChange?(engine) }
     }
 }

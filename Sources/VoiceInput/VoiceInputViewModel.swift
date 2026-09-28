@@ -12,7 +12,7 @@ public final class VoiceInputViewModel: ObservableObject {
     @Published public var overlayState: OverlayState = .hidden
     @Published public var partialText: String = ""
     @Published public var rmsLevel: Float = 0
-    @Published public var statusText: String = ""
+    @Published public var asrEngine: VoiceInputASREngine = .systemSpeech
 
     private let engine = VoiceInputEngine()
     private var overlayWindow: VoiceInputOverlayWindow?
@@ -28,15 +28,15 @@ public final class VoiceInputViewModel: ObservableObject {
             await engine.setStateChangeHandler { [weak self] in self?.handleStateChange($0) }
             await engine.setPartialTextHandler { [weak self] in
                 self?.partialText = $0
-                self?.overlayWindow?.updateText($0, isStatus: false)
+                self?.overlayWindow?.updateText($0)
             }
             await engine.setRMSLevelHandler { [weak self] in
                 self?.rmsLevel = $0
                 self?.overlayWindow?.updateRMS($0)
             }
-            await engine.setStatusTextHandler { [weak self] in
-                self?.statusText = $0
-                self?.overlayWindow?.updateText($0, isStatus: true)
+            await engine.setEngineChangeHandler { [weak self] in
+                self?.asrEngine = $0
+                self?.overlayWindow?.updateEngine($0)
             }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(handleTriggerKeyDown), name: .voiceInputTriggerKeyDown, object: nil)
@@ -57,27 +57,32 @@ public final class VoiceInputViewModel: ObservableObject {
     @objc private func handleInjectText(_ notification: Notification) {
         guard let userInfo = notification.userInfo,
               let text = userInfo["text"] as? String else { return }
-        let window = overlayWindow
-        overlayWindow = nil // Consume immediately to prevent double-hide from handleStateChange
         TextInjector.inject(text: text, targetApp: nil)
-        window?.hide()
+        dismissOverlay()
         reset()
     }
 
     @objc private func handleTriggerKeyDown(_ notification: Notification) {
         guard isEnabled else { return }
-        overlayWindow = VoiceInputOverlayWindow()
-        overlayWindow?.show()
+        // One capsule per session. A press arriving while a session is still in flight must not
+        // replace the visible window: the replaced window would be left on screen forever, and
+        // the engine ignores startRecording while busy anyway.
+        guard overlayWindow == nil else { return }
+        let window = VoiceInputOverlayWindow()
+        window.updateEngine(asrEngine)
+        window.show()
+        overlayWindow = window
         startTask?.cancel()
         startTask = Task { await engine.startRecording() }
     }
 
     @objc private func handleTriggerKeyUp(_ notification: Notification) {
         guard let userInfo = notification.userInfo, let duration = userInfo["duration"] as? TimeInterval else { return }
+        // The capsule stays on screen while the session is in flight, so releasing the key only
+        // stops recording; the capsule goes away when the text is injected (or the session ends).
         if duration < minPressDuration {
             startTask?.cancel()
             Task { await engine.cancelRecording() }
-            if let w = overlayWindow { overlayWindow = nil; w.hide() }
             return
         }
         Task { await engine.stopRecording() }
@@ -94,27 +99,35 @@ public final class VoiceInputViewModel: ObservableObject {
         case .done:
             overlayState = .hidden
             stopEscapeMonitor()
-            if let w = overlayWindow { overlayWindow = nil; w.hide() }
+            dismissOverlay()
             reset()
         case .cancelled:
             overlayState = .hidden
             stopEscapeMonitor()
-            if let w = overlayWindow { overlayWindow = nil; w.hide() }
+            dismissOverlay()
             reset()
         case .error(let error):
             overlayState = .error(error.errorDescription ?? "未知错误")
             stopEscapeMonitor()
-            overlayWindow?.updateText(error.errorDescription ?? "错误", isStatus: true)
+            if overlayWindow == nil {
+                overlayWindow = VoiceInputOverlayWindow()
+                overlayWindow?.show()
+            }
+            overlayWindow?.updateText(error.errorDescription ?? "错误")
             let window = overlayWindow
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 // Only close if this window is still the current overlay (not replaced by a new recording)
-                if let w = window, self?.overlayWindow === w {
-                    self?.overlayWindow = nil
-                    w.hide()
-                    self?.reset()
-                }
+                guard let self, let shown = window, self.overlayWindow === shown else { return }
+                self.dismissOverlay()
+                self.reset()
             }
         }
+    }
+
+    private func dismissOverlay() {
+        guard let window = overlayWindow else { return }
+        overlayWindow = nil
+        window.hide()
     }
 
     private func startEscapeMonitor() {
@@ -128,7 +141,7 @@ public final class VoiceInputViewModel: ObservableObject {
         if let m = escapeMonitor { NSEvent.removeMonitor(m); escapeMonitor = nil }
     }
 
-    private func reset() { partialText = ""; rmsLevel = 0; statusText = "" }
+    private func reset() { partialText = ""; rmsLevel = 0 }
 }
 
 public enum OverlayState: Equatable {

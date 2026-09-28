@@ -21,12 +21,7 @@ final class StreamingRecognizer: @unchecked Sendable {
     var onError: (@MainActor (Error) -> Void)?
 
     static func isLanguageSupported(_ language: String) -> Bool {
-        if language == "auto" {
-            guard let sysLang = Locale.preferredLanguages.first else { return false }
-            return isLanguageSupported(sysLang)
-        }
-        let locale = Locale(identifier: language)
-        return SFSpeechRecognizer.supportedLocales().contains(locale)
+        resolveLocale(for: language) != nil
     }
 
     static func resolveLocale(for language: String) -> Locale? {
@@ -34,11 +29,21 @@ final class StreamingRecognizer: @unchecked Sendable {
             guard let sysLang = Locale.preferredLanguages.first else { return nil }
             return resolveLocale(for: sysLang)
         }
-        let locale = Locale(identifier: language)
-        if SFSpeechRecognizer.supportedLocales().contains(locale) {
-            return locale
-        }
-        return nil
+        let requested = Locale(identifier: language)
+        let supported = SFSpeechRecognizer.supportedLocales()
+        if supported.contains(requested) { return requested }
+        // System languages such as "zh-Hans-CA" are absent from supportedLocales while "zh-CN" is
+        // present, so match on language/script/region instead of dropping to the offline engine.
+        return supported
+            .filter { $0.language.languageCode == requested.language.languageCode }
+            .max { matchScore($0, requested) < matchScore($1, requested) }
+    }
+
+    private static func matchScore(_ supported: Locale, _ requested: Locale) -> Int {
+        var score = 0
+        if let script = requested.language.script, supported.language.script == script { score += 2 }
+        if let region = requested.language.region, supported.language.region == region { score += 1 }
+        return score
     }
 
     init?(locale: Locale) {

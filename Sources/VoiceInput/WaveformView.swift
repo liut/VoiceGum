@@ -14,11 +14,20 @@ struct WaveformView: View {
 
     @State private var heights: [CGFloat] = [2, 2, 2, 2, 2]
 
+    /// System speech recognition and the offline model get distinct bar colors, so the engine in
+    /// use is visible at a glance.
+    private var barColor: Color {
+        switch model.engine {
+        case .systemSpeech: Color(red: 1.00, green: 0.92, blue: 0.62)
+        case .offlineModel: Color(red: 0.55, green: 0.94, blue: 0.62)
+        }
+    }
+
     var body: some View {
         HStack(spacing: spacing) {
             ForEach(0..<5, id: \.self) { i in
                 RoundedRectangle(cornerRadius: barW / 2)
-                    .fill(.white.opacity(0.9))
+                    .fill(barColor.opacity(0.9))
                     .frame(width: barW, height: heights[i])
             }
         }
