@@ -151,6 +151,11 @@ let package = Package(
             dependencies: ["VoiceGumServices"],
             path: "Tests/VoiceGumServicesTests"
         ),
+        .testTarget(
+            name: "VoiceGumVoiceInputTests",
+            dependencies: ["VoiceGumVoiceInput"],
+            path: "Tests/VoiceGumVoiceInputTests"
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
