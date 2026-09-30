@@ -273,31 +273,31 @@ public actor ModelDownloadManager {
 public let allModels: [ModelInfo] = [
     ModelInfo(
         id: "sense-voice-q8-0", displayName: "Small Q8_0 量化",
-        fileSize: 230_000_000, sizeLabel: "~230 MB",
+        fileSize: 291_985_952, sizeLabel: "~292 MB",
         hfRepo: "lovemefan/sense-voice-gguf",
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-q8_0.gguf"]
     ),
     ModelInfo(
         id: "sense-voice-fp16", displayName: "Small FP16",
-        fileSize: 350_000_000, sizeLabel: "~350 MB",
+        fileSize: 470_292_448, sizeLabel: "~470 MB",
         hfRepo: "lovemefan/sense-voice-gguf",
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp16.gguf"]
     ),
     ModelInfo(
         id: "sense-voice-fp32", displayName: "Small FP32 (最高精度)",
-        fileSize: 700_000_000, sizeLabel: "~700 MB",
+        fileSize: 936_516_064, sizeLabel: "~937 MB",
         hfRepo: "lovemefan/sense-voice-gguf",
         msRepo: "lovemefan/SenseVoiceGGUF",
         hfFiles: ["sense-voice-small-fp32.gguf"]
     ),
     ModelInfo(
         id: "funasr-nano", displayName: "FunASR-Nano (31语言)",
-        fileSize: 1_100_000_000, sizeLabel: "~1.1 GB",
-        hfRepo: "FunAudioLLM/Fun-ASR-Nano",
-        msRepo: "",
-        hfFiles: ["funasr-encoder-f16.gguf", "Fun-ASR-Nano-Decoder.q8_0.gguf"]
+        fileSize: 953_550_784, sizeLabel: "~954 MB",
+        hfRepo: "FunAudioLLM/Fun-ASR-Nano-GGUF",
+        msRepo: "FunAudioLLM/Fun-ASR-Nano-GGUF",
+        hfFiles: ["funasr-encoder-f16.gguf", "qwen3-0.6b-q4km.gguf"]
     ),
 ]
 

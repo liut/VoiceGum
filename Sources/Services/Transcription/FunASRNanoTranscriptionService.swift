@@ -61,7 +61,9 @@ public final class FunASRNanoTranscriptionService: @unchecked Sendable, Transcri
 
         // Nano needs two GGUF files: encoder + decoder (LLM)
         let encFile = ggufFiles.first { $0.lowercased().contains("encoder") }
-        let decFile = ggufFiles.first { $0.lowercased().contains("decoder") }
+        let decFile = ggufFiles.first {
+            $0.lowercased().contains("decoder") || $0.lowercased().contains("qwen3")
+        }
 
         guard let enc = encFile, let dec = decFile else {
             throw TranscriptionError.modelNotFound(
