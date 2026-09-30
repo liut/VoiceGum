@@ -353,10 +353,6 @@ struct ModelCard: View {
                     HStack(spacing: 8) {
                         Text(family.name).font(.headline).fontWeight(.bold)
                         ForEach(family.tags, id: \.self) { TagBadge(text: $0) }
-                        let anyDled = family.models.contains { ds.downloadedModels.contains($0.id) }
-                        let anyPartial = family.models.contains { ds.partialProgress[$0.id] != nil }
-                        if anyDled { TagBadge(text: String(localized: "已下载"), color: .green) }
-                        if anyPartial { TagBadge(text: String(localized: "未完成"), color: .orange) }
                     }
                     Text(family.description).font(.caption).foregroundColor(.secondary).lineLimit(2)
                     if let v = family.models.first(where: { $0.id == selectedModel }) {
@@ -377,8 +373,15 @@ struct ModelCard: View {
                     ForEach(family.models, id: \.id) { model in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(model.displayName)
-                                    .font(.subheadline).fontWeight(selectedModel == model.id ? .semibold : .regular)
+                                HStack(spacing: 6) {
+                                    Text(model.displayName)
+                                        .font(.subheadline).fontWeight(selectedModel == model.id ? .semibold : .regular)
+                                    if ds.downloadedModels.contains(model.id) {
+                                        TagBadge(text: String(localized: "已下载"), color: .green)
+                                    } else if ds.partialProgress[model.id] != nil {
+                                        TagBadge(text: String(localized: "未完成"), color: .orange)
+                                    }
+                                }
                                 Text("\(String(localized: "预计下载")): \(model.fileSizeDescription)")
                                     .font(.caption2).foregroundColor(.secondary)
                             }
