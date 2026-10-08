@@ -5,8 +5,12 @@ NOTARY_PROFILE = NotaryProfile
 VERSION = 1.0.0
 BUILD_PATH = .build/release
 RELEASE_APP_PATH = build/Release/VoiceGum.app
+# Release artifact version: the tag at HEAD, or tag-commits-g<sha>, or the short sha.
+GIT_VERSION := $(shell git describe --tags --always)
+DMG_STAGE = $(BUILD_PATH)/dmg-stage
+DMG_PATH = build/Release/$(PRODUCT_NAME)-$(GIT_VERSION).dmg
 
-.PHONY: all build run run-cli run-app install install-cli clean sign notarize pkg bundle funasr-libs
+.PHONY: all build run run-cli run-app install install-cli clean sign notarize dmg pkg bundle funasr-libs
 
 all: build
 
@@ -70,6 +74,27 @@ notarize: sign
 install: notarize
 	rm -rf /Applications/VoiceGum.app
 	cp -r $(RELEASE_APP_PATH) /Applications/
+
+# Contents/CodeResources is the staple ticket Apple writes into the notarized bundle,
+# so its presence means this app was already signed, notarized and stapled.
+dmg:
+	@if [ -f $(RELEASE_APP_PATH)/Contents/CodeResources ]; then \
+		echo "App is already notarized — skipping make notarize"; \
+	else \
+		echo "App is not notarized yet — running make notarize"; \
+		$(MAKE) notarize; \
+	fi
+	rm -rf $(DMG_STAGE) $(DMG_PATH)
+	mkdir -p $(DMG_STAGE)
+	cp -R $(RELEASE_APP_PATH) $(DMG_STAGE)/
+	ln -s /Applications $(DMG_STAGE)/Applications
+	hdiutil create -volname "$(PRODUCT_NAME)" -srcfolder $(DMG_STAGE) -ov -format UDZO $(DMG_PATH)
+	rm -rf $(DMG_STAGE)
+	codesign --force --sign "$(DEVELOPER_ID)" --timestamp $(DMG_PATH)
+	xcrun notarytool submit $(DMG_PATH) --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple $(DMG_PATH)
+	@echo "Done: $(DMG_PATH)"
+	@echo "Verify with: spctl -a -vvv -t open --context context:primary-signature $(DMG_PATH)"
 
 pkg: bundle
 
